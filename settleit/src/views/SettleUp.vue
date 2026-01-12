@@ -21,10 +21,32 @@ const getMemberName = (id) => group.value?.members.find(m => m.id === id)?.name 
 const getMemberColor = (id) => group.value?.members.find(m => m.id === id)?.color || 'var(--primary)'
 
 const formatCurrency = (amount) => {
-  return new Intl.NumberFormat('en-US', {
+  return new Intl.NumberFormat('en-IN', {
     style: 'currency',
-    currency: group.value?.currency || 'USD'
+    currency: group.value?.currency || 'INR',
+    minimumFractionDigits: 0
   }).format(amount)
+}
+
+const settleTransaction = async (tx) => {
+  try {
+    await store.addExpense({
+      groupId: group.value.id,
+      description: `Settlement: ${getMemberName(tx.from)} paid ${getMemberName(tx.to)}`,
+      amount: tx.amount,
+      paidBy: tx.from,
+      date: new Date().toISOString(),
+      category: 'Settlement',
+      splitMethod: 'custom',
+      splitWith: [tx.to],
+      splitData: { [tx.to]: tx.amount },
+      isSettlement: true
+    })
+    alert('Transaction marked as settled!')
+    await store.fetchExpensesByGroup(group.value.id)
+  } catch (err) {
+    alert('Error settling transaction: ' + err.message)
+  }
 }
 </script>
 
@@ -64,7 +86,7 @@ const formatCurrency = (amount) => {
             <span class="name">{{ getMemberName(tx.to) }}</span>
           </div>
           
-          <button class="btn-check">
+          <button class="btn-check" @click="settleTransaction(tx)">
             <CheckCircle2 :size="20" />
           </button>
         </div>

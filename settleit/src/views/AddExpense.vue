@@ -4,218 +4,247 @@ import { useAppStore } from '../stores/app'
 import { useRouter, useRoute } from 'vue-router'
 import { 
   ArrowLeft, 
-  X, 
-  Check, 
   ChevronRight,
-  Info,
-  Calendar,
-  Tag,
-  DollarSign
+  HelpCircle,
+  Plus,
+  Trash2,
+  Coffee,
+  Utensils,
+  ShoppingBag,
+  Camera,
+  Music
 } from 'lucide-vue-next'
 
 const store = useAppStore()
 const router = useRouter()
 const route = useRoute()
 
-const step = ref(1) // 1: Amount/Desc, 2: Splitting
-const form = ref({
-  description: '',
-  amount: null,
-  groupId: store.groups[0]?.id || '',
-  paidBy: 'u1', // Default to current user
-  date: new Date().toISOString().split('T')[0],
-  category: 'Food',
-  splitMethod: 'equal' // equal, percentage, custom
-})
-
-const selectedGroup = computed(() => store.getGroupById(form.value.groupId))
-const members = computed(() => selectedGroup.value?.members || [])
+const billName = ref('')
+const selectedCategory = ref('Coffee')
+const items = ref([
+  { id: Date.now(), name: '', quantity: 1, amount: null }
+])
 
 const categories = [
-  { id: 'Food', color: 'var(--secondary)' },
-  { id: 'Transport', color: 'var(--accent)' },
-  { id: 'Utilities', color: 'var(--primary)' },
-  { id: 'Shopping', color: '#8b5cf6' },
-  { id: 'Entertainment', color: '#10b981' },
-  { id: 'Other', color: '#64748b' }
+  { id: 'Coffee', icon: Coffee },
+  { id: 'Food', icon: Utensils },
+  { id: 'Shopping', icon: ShoppingBag },
+  { id: 'Music', icon: Music },
+  { id: 'Other', icon: Camera }
 ]
 
-const nextStep = () => {
-  if (form.value.description && form.value.amount > 0) {
-    step.value = 2
+// Default to first group if none specified
+const groupId = ref(store.groups[0]?.id || '')
+const selectedGroup = computed(() => store.getGroupById(groupId.value))
+const members = computed(() => selectedGroup.value?.members || [])
+
+// Split tracking
+const splitMembers = ref([])
+
+onMounted(async () => {
+  if (store.groups.length === 0) {
+    await store.fetchGroups()
+  }
+  if (store.groups.length > 0) {
+    groupId.value = store.groups[0].id
+    // Initialize split with all members
+    splitMembers.value = [...selectedGroup.value.members.map(m => m.id)]
+  }
+})
+
+const addItem = () => {
+  items.value.push({ id: Date.now(), name: '', quantity: 1, amount: null })
+}
+
+const removeItem = (id) => {
+  if (items.value.length > 1) {
+    items.value = items.value.filter(i => i.id !== id)
   }
 }
 
-const saveExpense = () => {
-  store.addExpense({
-    ...form.value,
-    amount: parseFloat(form.value.amount)
-  })
-  router.push(`/group/${form.value.groupId}`)
+const subtotal = computed(() => {
+  return items.value.reduce((sum, item) => sum + (parseFloat(item.amount || 0) * (item.quantity || 1)), 0)
+})
+
+const toggleMember = (memberId) => {
+  if (splitMembers.value.includes(memberId)) {
+    splitMembers.value = splitMembers.value.filter(id => id !== memberId)
+  } else {
+    splitMembers.value.push(memberId)
+  }
+}
+
+const handleNext = async () => {
+  if (!billName.value || subtotal.value <= 0) return
+
+  const expenseData = {
+    description: billName.value,
+    amount: subtotal.value,
+    groupId: groupId.value,
+    date: new Date().toISOString(),
+    category: selectedCategory.value,
+    items: items.value.map(i => ({ ...i })),
+    splitWith: splitMembers.value,
+    paidBy: store.authStore?.user?.uid || 'guest_user'
+  }
+
+  await store.addExpense(expenseData)
+  router.push(`/group/${groupId.value}`)
 }
 </script>
 
 <template>
-  <div class="add-expense-page">
-    <header class="page-header">
-      <button class="back-btn" @click="step === 1 ? router.back() : step = 1">
+  <div class="add-bill-page">
+    <header class="header">
+      <button class="icon-btn" @click="router.back()">
         <ArrowLeft :size="20" />
       </button>
-      <h1>Add New Expense</h1>
+      <h2>Split The Bill</h2>
+      <button class="icon-btn">
+        <HelpCircle :size="20" />
+      </button>
     </header>
 
-    <div class="stepper">
-      <div v-for="s in [1, 2]" :key="s" class="step" :class="{ active: step >= s }">
-        <div class="step-num">{{ s }}</div>
-        <div v-if="s < 2" class="step-line" :class="{ active: step > s }"></div>
-      </div>
-    </div>
-
-    <div v-if="step === 1" class="step-container glass-card">
-      <div class="form-group">
-        <label>What was it for?</label>
-        <div class="input-with-icon">
-          <Tag class="icon" :size="20" />
-          <input 
-            v-model="form.description" 
-            type="text" 
-            placeholder="e.g. Dinner at Joey's" 
-            autofocus
-          />
-        </div>
+    <div class="form-content">
+      <!-- Bill Name -->
+      <div class="input-section">
+        <label>Bill Name</label>
+        <input 
+          v-model="billName" 
+          type="text" 
+          placeholder="e.g. Ever gathering" 
+          class="main-input"
+        />
       </div>
 
-      <div class="form-group">
-        <label>How much?</label>
-        <div class="input-with-icon amount">
-          <DollarSign class="icon" :size="24" />
-          <input 
-            v-model="form.amount" 
-            type="number" 
-            placeholder="0.00" 
-            step="0.01"
-          />
-        </div>
-      </div>
-
-      <div class="form-grid">
-        <div class="form-group">
-          <label>Pick a Group</label>
-          <select v-model="form.groupId">
-            <option v-for="group in store.groups" :key="group.id" :value="group.id">
-              {{ group.name }}
-            </option>
-          </select>
-        </div>
-
-        <div class="form-group">
-          <label>Category</label>
-          <div class="category-grid">
-            <button 
-              v-for="cat in categories" 
-              :key="cat.id"
-              class="cat-chip"
-              :class="{ active: form.category === cat.id }"
-              :style="{ '--cat-color': cat.color }"
-              @click="form.category = cat.id"
-            >
-              {{ cat.id }}
-            </button>
+      <!-- Category -->
+      <div class="input-section">
+        <label>Category</label>
+        <div class="category-selector" @click="showCategoryList = !showCategoryList">
+          <div class="selected-cat">
+            <span class="cat-icon">☕</span>
+            <span>{{ selectedCategory }}</span>
           </div>
+          <ChevronRight :size="20" class="chevron" />
         </div>
       </div>
 
-      <button 
-        class="btn btn-primary next-btn" 
-        :disabled="!form.description || !form.amount"
-        @click="nextStep"
-      >
-        <span>Next</span>
-        <ChevronRight :size="20" />
-      </button>
-    </div>
-
-    <div v-else class="step-container glass-card">
-      <div class="split-header">
-        <h3>Splitting: {{ form.description }}</h3>
-        <p class="amount-summary">{{ form.amount }} {{ selectedGroup?.currency }}</p>
-      </div>
-
-      <div class="split-methods">
-        <button 
-          class="method-btn" 
-          :class="{ active: form.splitMethod === 'equal' }"
-          @click="form.splitMethod = 'equal'"
-        >
-          <span class="icon">=</span>
-          <span>Equally</span>
-        </button>
-        <button 
-          class="method-btn" 
-          :class="{ active: form.splitMethod === 'percentage' }"
-          @click="form.splitMethod = 'percentage'"
-        >
-          <span class="icon">%</span>
-          <span>By %</span>
-        </button>
-      </div>
-
-      <div class="members-split-list">
-        <div v-for="member in members" :key="member.id" class="split-item">
-          <div class="member-info">
+      <!-- Split With -->
+      <div class="input-section">
+        <label>Split With</label>
+        <div class="members-list">
+          <!-- Current User -->
+          <div class="member-chip active">
+            <div class="avatar" style="background-color: #6366f1">Y</div>
+            <span>You</span>
+          </div>
+          
+          <!-- Group Members -->
+          <div 
+            v-for="member in members.filter(m => m.id !== 'guest_user')" 
+            :key="member.id"
+            class="member-chip"
+            :class="{ active: splitMembers.includes(member.id) }"
+            @click="toggleMember(member.id)"
+          >
             <div class="avatar" :style="{ backgroundColor: member.color }">
               {{ member.name[0] }}
             </div>
             <span>{{ member.name }}</span>
+            <div v-if="splitMembers.includes(member.id)" class="remove-dot">−</div>
           </div>
-          
-          <div v-if="form.splitMethod === 'equal'" class="share-info">
-            {{ (form.amount / members.length).toFixed(2) }}
-          </div>
-          <div v-else class="share-input">
-            <input type="number" placeholder="0" class="mini-input">
-            <span v-if="form.splitMethod === 'percentage'">%</span>
+
+          <!-- Add New -->
+          <div class="member-chip add-new">
+            <div class="avatar dashed"><Plus :size="16" /></div>
+            <span>Add New</span>
           </div>
         </div>
       </div>
 
-      <div class="summary-box">
-        <Info :size="16" />
-        <p v-if="form.splitMethod === 'equal'">
-          Everyone will pay an equal share of {{ (form.amount / members.length).toFixed(2) }}
-        </p>
-        <p v-else>
-          Enter the percentages for each member.
-        </p>
+      <!-- Items Section -->
+      <div class="items-section">
+        <div class="section-header">
+          <label>Item</label>
+          <button class="add-img-btn">
+            <Plus :size="14" />
+            <span>Add image</span>
+          </button>
+        </div>
+
+        <div class="items-list">
+          <div v-for="item in items" :key="item.id" class="item-row glass-card">
+            <div class="item-main">
+              <input v-model="item.name" type="text" placeholder="Item name" class="item-name-input">
+              <button class="delete-btn" @click="removeItem(item.id)"><Trash2 :size="16" /></button>
+            </div>
+            <div class="item-details">
+              <div class="qty-input">
+                <input v-model.number="item.quantity" type="number" min="1">
+              </div>
+              <div class="currency-label">₹</div>
+              <div class="amount-input">
+                <input v-model.number="item.amount" type="number" placeholder="0.00">
+              </div>
+            </div>
+          </div>
+          
+          <button class="add-item-btn" @click="addItem">
+            Add new Item
+          </button>
+        </div>
       </div>
 
-      <button class="btn btn-primary next-btn" @click="saveExpense">
-        <Check :size="20" />
-        <span>Save Expense</span>
-      </button>
+      <!-- Summary -->
+      <div class="summary-section">
+        <label>Summary</label>
+        <div class="summary-row">
+          <span>Sub Total</span>
+          <span class="subtotal-val">₹ {{ subtotal.toLocaleString('en-IN') }}</span>
+        </div>
+      </div>
     </div>
+
+    <!-- Footer Action -->
+    <footer class="footer">
+      <button 
+        class="next-btn" 
+        :disabled="!billName || subtotal <= 0"
+        @click="handleNext"
+      >
+        Next
+      </button>
+    </footer>
   </div>
 </template>
 
 <style scoped>
-.add-expense-page {
-  max-width: 600px;
-  margin: 0 auto;
+.add-bill-page {
   display: flex;
   flex-direction: column;
-  gap: 2rem;
-}
-
-.page-header {
-  display: flex;
-  align-items: center;
+  min-height: 100vh;
   gap: 1.5rem;
+  padding-bottom: 100px;
+  max-width: 500px;
+  margin: 0 auto;
 }
 
-.back-btn {
-  background: var(--glass);
-  border: 1px solid var(--glass-border);
-  color: var(--text);
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 0;
+}
+
+.header h2 {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.icon-btn {
+  background: white;
+  border: 1px solid #e2e8f0;
   width: 40px;
   height: 40px;
   border-radius: 50%;
@@ -225,213 +254,296 @@ const saveExpense = () => {
   cursor: pointer;
 }
 
-.stepper {
+.form-content {
   display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 0;
-  margin-bottom: 1rem;
+  flex-direction: column;
+  gap: 1.5rem;
 }
 
-.step {
+.input-section {
   display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.input-section label {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.main-input {
+  background: white;
+  border: 1px solid #f1f5f9;
+  padding: 1rem;
+  border-radius: 12px;
+  font-size: 1rem;
+}
+
+.category-selector {
+  background: white;
+  border: 1px solid #f1f5f9;
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+}
+
+.selected-cat {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.9375rem;
+}
+
+.cat-icon {
+  font-size: 1.25rem;
+}
+
+.chevron {
+  color: #94a3b8;
+}
+
+.members-list {
+  display: flex;
+  gap: 1rem;
+  overflow-x: auto;
+  padding: 0.5rem 0;
+  scrollbar-width: none;
+}
+
+.members-list::-webkit-scrollbar { display: none; }
+
+.member-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 60px;
+  position: relative;
+  cursor: pointer;
+}
+
+.member-chip .avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.member-chip.active .avatar {
+  border-color: #5025d1;
+}
+
+.remove-dot {
+  position: absolute;
+  top: -2px;
+  right: 5px;
+  background: #f1f5f9;
+  color: #ef4444;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 14px;
+  border: 2px solid white;
+}
+
+.member-chip span {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.avatar.dashed {
+  border: 1.5px dashed #cbd5e1;
+  background: transparent;
+  color: #94a3b8;
+}
+
+.items-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.items-section .section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.items-section .section-header label {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.add-img-btn {
+  background: none;
+  border: none;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: #94a3b8;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.item-row {
+  background: white;
+  padding: 1rem;
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.item-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.item-name-input {
+  border: none;
+  background: none;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #0f172a;
+  padding: 0;
+}
+
+.delete-btn {
+  background: none;
+  border: none;
+  color: #cbd5e1;
+  cursor: pointer;
+}
+
+.item-details {
+  display: grid;
+  grid-template-columns: 60px 40px 1fr;
   align-items: center;
   gap: 0.5rem;
 }
 
-.step-num {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: var(--surface-light);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 600;
-  transition: all 0.3s ease;
-}
-
-.step.active .step-num {
-  background: var(--primary);
-  color: white;
-}
-
-.step-line {
-  width: 60px;
-  height: 2px;
-  background: var(--surface-light);
-}
-
-.step-line.active {
-  background: var(--primary);
-}
-
-.step-container {
-  padding: 2rem;
-  display: flex;
-  flex-direction: column;
-  gap: 2rem;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.form-group label {
+.qty-input input {
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+  border-radius: 8px;
+  padding: 0.5rem;
+  text-align: center;
   font-size: 0.875rem;
+}
+
+.currency-label {
+  font-size: 0.75rem;
+  color: #94a3b8;
   font-weight: 600;
-  color: var(--text-muted);
-}
-
-.input-with-icon {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.input-with-icon .icon {
-  position: absolute;
-  left: 1rem;
-  color: var(--text-muted);
-}
-
-.input-with-icon input {
-  padding-left: 3rem;
-  font-size: 1.125rem;
-}
-
-.input-with-icon.amount input {
-  font-size: 2rem;
-  font-weight: 700;
-  padding-left: 3.5rem;
-  height: 80px;
-}
-
-.category-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 0.75rem;
-}
-
-.cat-chip {
-  padding: 0.75rem;
-  border-radius: 10px;
-  border: 1px solid var(--glass-border);
-  background: var(--glass);
-  color: var(--text-muted);
-  font-size: 0.875rem;
-  cursor: pointer;
-  transition: all 0.2s ease;
   text-align: center;
 }
 
-.cat-chip:hover {
-  background: var(--glass-border);
+.amount-input input {
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+  border-radius: 8px;
+  padding: 0.5rem 1rem;
+  text-align: right;
+  font-size: 0.875rem;
+  font-weight: 700;
 }
 
-.cat-chip.active {
-  background: var(--cat-color);
-  color: white;
-  border-color: transparent;
+.add-item-btn {
+  background: white;
+  border: 1px solid #f1f5f9;
+  padding: 1rem;
+  border-radius: 14px;
+  color: #64748b;
+  font-size: 0.875rem;
   font-weight: 600;
+  cursor: pointer;
+}
+
+.summary-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.summary-section label {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.875rem;
+  color: #64748b;
+}
+
+.subtotal-val {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: white;
+  padding: 1.5rem;
+  border-top: 1px solid #f1f5f9;
+  z-index: 100;
 }
 
 .next-btn {
   width: 100%;
+  max-width: 450px;
+  margin: 0 auto;
+  display: block;
+  background: #5025d1;
+  color: white;
+  border: none;
   height: 56px;
-  font-size: 1.125rem;
-}
-
-/* Split View Styles */
-.split-header {
-  text-align: center;
-}
-
-.amount-summary {
-  font-size: 2rem;
+  border-radius: 14px;
+  font-size: 1rem;
   font-weight: 700;
-  color: var(--secondary);
-  margin-top: 0.5rem;
-}
-
-.split-methods {
-  display: flex;
-  gap: 0.75rem;
-}
-
-.method-btn {
-  flex: 1;
-  padding: 0.75rem;
-  border-radius: 10px;
-  border: 1px solid var(--glass-border);
-  background: var(--glass);
-  color: var(--text-muted);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
   cursor: pointer;
 }
 
-.method-btn.active {
-  background: var(--surface-light);
-  color: white;
-  border-color: var(--primary);
+.next-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
-.members-split-list {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.split-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0.75rem;
-  border-bottom: 1px solid var(--glass-border);
-}
-
-.member-info {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 600;
-  color: white;
-}
-
-.mini-input {
-  width: 60px;
-  padding: 0.5rem;
-  text-align: right;
-}
-
-.summary-box {
-  background: rgba(99, 102, 241, 0.05);
-  border: 1px solid rgba(99, 102, 241, 0.1);
-  padding: 1rem;
-  border-radius: 10px;
-  display: flex;
-  gap: 0.75rem;
-  font-size: 0.875rem;
-  color: var(--primary-light);
-}
-
-@media (max-width: 480px) {
-  .category-grid {
-    grid-template-columns: 1fr;
+/* Adjust for Laptop View */
+@media (min-width: 768px) {
+  .footer {
+    position: relative;
+    padding: 0;
+    border: none;
+    background: none;
   }
 }
 </style>

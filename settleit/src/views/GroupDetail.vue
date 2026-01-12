@@ -12,26 +12,49 @@ import {
   Car, 
   Home, 
   ShoppingBag,
-  MoreVertical
+  MoreVertical,
+  Users,
+  Trash2
 } from 'lucide-vue-next'
 
 const store = useAppStore()
 const route = useRoute()
 const router = useRouter()
 
-onMounted(async () => {
+const showMembers = ref(false)
+const newMemberEmail = ref('')
+
+const addMember = async () => {
+  if (!newMemberEmail.value) return
+  try {
+    await store.inviteMemberByEmail(route.params.id, newMemberEmail.value)
+    newMemberEmail.value = ''
+    alert('Member added successfully!')
+  } catch (err) {
+    alert(err.message)
+  }
+}
+
+const deleteExpense = async (expenseId) => {
+  if (confirm('Are you sure you want to delete this expense?')) {
+    await store.deleteExpense(expenseId)
+  }
+}
+
+onMounted(() => {
   if (route.params.id) {
-    await store.fetchExpensesByGroup(route.params.id)
+    store.subscribeToExpenses(route.params.id)
   }
 })
 
 const group = computed(() => store.getGroupById(route.params.id))
 const expenses = computed(() => store.getExpensesByGroup(route.params.id))
 
-const formatCurrency = (amount, currency = 'USD') => {
-  return new Intl.NumberFormat('en-US', {
+const formatCurrency = (amount, currency = 'INR') => {
+  return new Intl.NumberFormat('en-IN', {
     style: 'currency',
-    currency: group.value?.currency || currency
+    currency: group.value?.currency || currency,
+    minimumFractionDigits: 0
   }).format(amount)
 }
 
@@ -86,8 +109,37 @@ const getMemberColor = (id) => group.value?.members.find(m => m.id === id)?.colo
           <CreditCard :size="20" />
           <span>Settle Up</span>
         </button>
+        <button class="btn btn-secondary" @click="showMembers = !showMembers">
+          <Users :size="20" />
+          <span>Members</span>
+        </button>
       </div>
     </div>
+
+    <!-- Members Section -->
+    <transition name="slide">
+      <section v-if="showMembers" class="members-section glass-card">
+        <div class="section-header">
+          <h3>Group Members</h3>
+        </div>
+        <div class="members-grid">
+          <div v-for="member in group.members" :key="member.id" class="member-card">
+            <div class="avatar" :style="{ backgroundColor: member.color }">
+              {{ member.name[0] }}
+            </div>
+            <div class="member-info">
+              <span class="name">{{ member.name }}</span>
+              <span class="role">{{ member.id === group.createdBy ? 'Admin' : 'Member' }}</span>
+            </div>
+          </div>
+          
+          <div class="add-member-form">
+            <input v-model="newMemberEmail" type="email" placeholder="friend@example.com">
+            <button class="btn btn-primary btn-sm" @click="addMember">Add</button>
+          </div>
+        </div>
+      </section>
+    </transition>
 
     <section class="expenses-section">
       <div class="section-header">
@@ -122,6 +174,12 @@ const getMemberColor = (id) => group.value?.members.find(m => m.id === id)?.colo
           <div class="expense-amount-box">
             <span class="expense-amount">{{ formatCurrency(expense.amount) }}</span>
             <span class="your-share">Your share: {{ formatCurrency(expense.amount / group.members.length) }}</span>
+          </div>
+
+          <div class="expense-actions">
+            <button class="icon-btn-sm" @click="deleteExpense(expense.id)">
+              <Trash2 :size="16" />
+            </button>
           </div>
         </div>
         
@@ -347,5 +405,82 @@ const getMemberColor = (id) => group.value?.members.find(m => m.id === id)?.colo
   width: 40px;
   height: 40px;
   padding: 0;
+}
+/* Members Section Styles */
+.members-section {
+  padding: 1.5rem;
+  margin-top: -1rem;
+}
+
+.members-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.member-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem;
+  background: #f8fafc;
+  border-radius: 12px;
+}
+
+.member-card .avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 600;
+  font-size: 0.8125rem;
+}
+
+.member-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.member-info .name {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.member-info .role {
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.add-member-form {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.add-member-form input {
+  flex: 1;
+  padding: 0.625rem 1rem;
+  border: 1px solid #f1f5f9;
+  border-radius: 10px;
+  font-size: 0.875rem;
+}
+
+.btn-sm {
+  height: 38px;
+  padding: 0 1.25rem;
+  font-size: 0.8125rem;
+}
+
+/* Transitions */
+.slide-enter-active, .slide-leave-active {
+  transition: all 0.3s ease;
+}
+.slide-enter-from, .slide-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
 }
 </style>

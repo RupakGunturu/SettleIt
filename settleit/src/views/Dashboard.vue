@@ -1,8 +1,23 @@
 <script setup>
-import { onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useAppStore } from '../stores/app'
-import { Plus, Users, ArrowUpRight, ArrowDownLeft, TrendingUp } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
+import { 
+  Plus, 
+  Users, 
+  Search, 
+  Bell, 
+  Menu, 
+  ChevronRight, 
+  Coffee, 
+  Utensils, 
+  ShoppingBag, 
+  Music, 
+  Camera,
+  Maximize2,
+  Activity,
+  History
+} from 'lucide-vue-next'
 
 const store = useAppStore()
 const router = useRouter()
@@ -11,280 +26,525 @@ onMounted(async () => {
   await store.fetchGroups()
 })
 
-const formatCurrency = (amount, currency = 'USD') => {
-  return new Intl.NumberFormat('en-US', {
+const showAddFriendModal = ref(false)
+const friendEmail = ref('')
+const isAddingFriend = ref(false)
+
+const handleAddFriend = async () => {
+  if (!friendEmail.value) return
+  isAddingFriend.value = true
+  await store.addFriend(friendEmail.value)
+  isAddingFriend.value = false
+  showAddFriendModal.value = false
+  friendEmail.value = ''
+}
+
+const formatCurrency = (amount, currency = 'INR') => {
+  return new Intl.NumberFormat('en-IN', {
     style: 'currency',
-    currency: currency
+    currency: currency,
+    minimumFractionDigits: 0
   }).format(amount)
+}
+
+const getCategoryIcon = (category) => {
+  switch (category?.toLowerCase()) {
+    case 'coffee': return Coffee
+    case 'food': return Utensils
+    case 'shopping': return ShoppingBag
+    case 'music': return Music
+    default: return Camera
+  }
 }
 </script>
 
 <template>
-  <div class="dashboard">
-    <section class="welcome-section">
-      <div class="welcome-text">
-        <h1>Welcome back, Rupak!</h1>
-        <p>You're all settled up with most people.</p>
+  <div class="dashboard-ref">
+    <!-- Header -->
+    <header class="header">
+      <div class="logo">SettleIt</div>
+      <div class="header-actions">
+        <button class="icon-btn"><Bell :size="20" /></button>
+        <button class="icon-btn"><Menu :size="20" /></button>
       </div>
-      <button class="btn btn-primary" @click="router.push('/add-group')">
-        <Plus :size="20" />
-        <span>New Group</span>
-      </button>
+    </header>
+
+    <!-- Summary Card -->
+    <section class="summary-section">
+      <div class="summary-card glass-card">
+        <p class="summary-label">7 Friends are owing you <span class="info-circle">?</span></p>
+        <h2 class="summary-amount">₹ 7,25,035</h2>
+      </div>
+
+      <div class="action-buttons">
+        <button class="btn-manual" @click="router.push('/add-expense')">
+          <Plus :size="18" />
+          <span>Add Manually</span>
+        </button>
+        <button class="btn-scan">
+          <Maximize2 :size="18" />
+          <span>Quick Scan</span>
+        </button>
+      </div>
     </section>
 
-    <div class="stats-grid">
-      <div class="stat-card glass-card">
-        <div class="stat-icon total">
-          <TrendingUp :size="24" />
-        </div>
-        <div class="stat-content">
-          <span class="stat-label">Total Balance</span>
-          <span class="stat-value">$1,240.00</span>
-        </div>
-      </div>
-      <div class="stat-card glass-card">
-        <div class="stat-icon owe">
-          <ArrowUpRight :size="24" />
-        </div>
-        <div class="stat-content">
-          <span class="stat-label">You Owe</span>
-          <span class="stat-value text-error">$150.00</span>
-        </div>
-      </div>
-      <div class="stat-card glass-card">
-        <div class="stat-icon owed">
-          <ArrowDownLeft :size="24" />
-        </div>
-        <div class="stat-content">
-          <span class="stat-label">You are Owed</span>
-          <span class="stat-value text-success">$320.00</span>
-        </div>
-      </div>
-    </div>
-
-    <section class="groups-section">
+    <!-- Friends List -->
+    <section class="friends-section">
       <div class="section-header">
-        <h2>Your Groups</h2>
-        <a href="#" class="view-all">View All</a>
+        <h3>Friends List</h3>
+        <button class="see-more" @click="showAddFriendModal = true">+ Add Friend</button>
       </div>
-
-      <div class="groups-grid">
-        <div 
-          v-for="group in store.groups" 
-          :key="group.id" 
-          class="group-card glass-card"
-          @click="router.push(`/group/${group.id}`)"
-        >
-          <div class="group-header">
-            <div class="group-icon">
-              <Users :size="24" />
-            </div>
-            <div class="group-info">
-              <h3>{{ group.name }}</h3>
-              <p>{{ group.members.length }} members</p>
-            </div>
+      <div class="friends-scroll">
+        <div v-for="friend in store.friends" :key="friend.id" class="friend-item">
+          <div class="avatar" :style="{ backgroundColor: friend.color }">
+            {{ friend.name[0] }}
           </div>
-          <div class="group-footer">
-            <div class="total-spent">
-              <span class="label">Total Spent</span>
-              <span class="amount">{{ formatCurrency(group.totalSpent, group.currency) }}</span>
-            </div>
-            <div class="member-avatars">
-              <div 
-                v-for="member in group.members.slice(0, 3)" 
-                :key="member.id"
-                class="mini-avatar"
-                :style="{ backgroundColor: member.color }"
-              >
-                {{ member.name[0] }}
-              </div>
-              <div v-if="group.members.length > 3" class="mini-avatar more">
-                +{{ group.members.length - 3 }}
-              </div>
-            </div>
-          </div>
+          <span class="friend-name">{{ friend.name }}</span>
+        </div>
+        
+        <div v-if="store.friends.length === 0" class="empty-friends-hint">
+          No friends added yet.
         </div>
       </div>
     </section>
+
+    <!-- Activity Feed (Replacing Mock History) -->
+    <section class="history-section">
+      <div class="section-header">
+        <h3>Activity Feed</h3>
+        <button class="see-more">View All</button>
+      </div>
+
+      <div class="history-list">
+        <div 
+          v-for="activity in store.activities" 
+          :key="activity.id" 
+          class="history-card glass-card"
+        >
+          <div class="card-top">
+            <div class="item-icon" :class="activity.type">
+              <Activity v-if="activity.type === 'group_created'" :size="20" />
+              <History v-else :size="20" />
+            </div>
+            <div class="item-info">
+              <h4>{{ activity.description }}</h4>
+              <p>{{ activity.timestamp ? new Date(activity.timestamp.toDate()).toLocaleString() : 'Just now' }}</p>
+            </div>
+            <div v-if="activity.amount" class="activity-amount">
+              {{ formatCurrency(activity.amount) }}
+            </div>
+          </div>
+        </div>
+
+        <div v-if="store.activities.length === 0" class="empty-feed glass-card">
+          <p>No recent activity. Start by adding an expense!</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Add Friend Modal -->
+    <transition name="fade">
+      <div v-if="showAddFriendModal" class="modal-overlay" @click.self="showAddFriendModal = false">
+        <div class="modal-content glass-card slide-up-modal">
+          <div class="modal-header">
+            <h3>Add New Friend</h3>
+            <button class="close-btn" @click="showAddFriendModal = false">×</button>
+          </div>
+          
+          <div class="modal-body">
+            <p>Enter your friend's email address to add them to your circle.</p>
+            <div class="form-group">
+              <label>Email Address</label>
+              <input 
+                v-model="friendEmail" 
+                type="email" 
+                placeholder="friend@example.com"
+                @keyup.enter="handleAddFriend"
+              >
+            </div>
+          </div>
+          
+          <div class="modal-footer">
+            <button class="btn btn-secondary" @click="showAddFriendModal = false">Cancel</button>
+            <button 
+              class="btn btn-primary" 
+              :disabled="!friendEmail || isAddingFriend"
+              @click="handleAddFriend"
+            >
+              {{ isAddingFriend ? 'Adding...' : 'Add Friend' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
   </div>
 </template>
 
 <style scoped>
-.dashboard {
+.dashboard-ref {
   display: flex;
   flex-direction: column;
-  gap: 2.5rem;
+  gap: 1.5rem;
+  padding-bottom: 2rem;
+  max-width: 500px;
+  margin: 0 auto;
 }
 
-.welcome-section {
+.header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  padding: 1rem 0;
 }
 
-.welcome-text h1 {
-  font-size: 2rem;
-  margin-bottom: 0.5rem;
+.logo {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+  font-size: 1.5rem;
+  color: #0f172a;
 }
 
-.welcome-text p {
-  color: var(--text-muted);
+.header-actions {
+  display: flex;
+  gap: 0.75rem;
 }
 
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 1.5rem;
-}
-
-.stat-card {
-  padding: 1.5rem;
+.icon-btn {
+  background: white;
+  border: 1px solid #e2e8f0;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
-  gap: 1.25rem;
+  justify-content: center;
+  cursor: pointer;
 }
 
-.stat-icon {
-  width: 50px;
-  height: 50px;
-  border-radius: 12px;
+.summary-section {
   display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.summary-card {
+  background: white;
+  padding: 2rem;
+  text-align: center;
+  border-radius: 24px;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.03);
+}
+
+.summary-label {
+  font-size: 0.875rem;
+  color: #64748b;
+  margin-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.info-circle {
+  border: 1px solid #cbd5e1;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  font-size: 10px;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 
-.stat-icon.total { background: rgba(99, 102, 241, 0.1); color: var(--primary); }
-.stat-icon.owe { background: rgba(239, 68, 68, 0.1); color: var(--error); }
-.stat-icon.owed { background: rgba(34, 197, 94, 0.1); color: var(--success); }
+.summary-amount {
+  font-size: 2.25rem;
+  font-weight: 800;
+  color: #0f172a;
+}
 
-.stat-label {
-  display: block;
+.action-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.btn-manual, .btn-scan {
+  height: 52px;
+  border-radius: 14px;
+  border: none;
+  font-weight: 600;
   font-size: 0.875rem;
-  color: var(--text-muted);
-  margin-bottom: 0.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  transition: transform 0.2s ease;
 }
 
-.stat-value {
-  font-size: 1.5rem;
-  font-weight: 700;
+.btn-manual {
+  background: #5025d1;
+  color: white;
 }
 
-.text-error { color: var(--error); }
-.text-success { color: var(--success); }
+.btn-scan {
+  background: #000000;
+  color: white;
+}
+
+.btn-manual:active, .btn-scan:active {
+  transform: scale(0.98);
+}
 
 .section-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
 }
 
-.view-all {
-  color: var(--primary-light);
-  text-decoration: none;
-  font-size: 0.875rem;
-  font-weight: 500;
+.section-header h3 {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #0f172a;
 }
 
-.groups-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 1.5rem;
-}
-
-.group-card {
-  padding: 1.5rem;
+.see-more {
+  background: none;
+  border: none;
+  font-size: 0.75rem;
+  color: #94a3b8;
   cursor: pointer;
-  transition: all 0.3s ease;
 }
 
-.group-card:hover {
-  transform: translateY(-5px);
-  border-color: var(--primary-light);
-}
-
-.group-header {
+.friends-scroll {
   display: flex;
-  align-items: center;
   gap: 1rem;
-  margin-bottom: 1.5rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+  scrollbar-width: none;
 }
 
-.group-icon {
+.friends-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.friend-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 60px;
+}
+
+.friend-item .avatar {
   width: 48px;
   height: 48px;
-  border-radius: 12px;
-  background: var(--surface-light);
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-muted);
-}
-
-.group-info h3 {
-  font-size: 1.125rem;
-  margin-bottom: 0.25rem;
-}
-
-.group-info p {
-  font-size: 0.875rem;
-  color: var(--text-muted);
-}
-
-.group-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  padding-top: 1rem;
-  border-top: 1px solid var(--glass-border);
-}
-
-.total-spent .label {
-  display: block;
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  margin-bottom: 0.25rem;
-}
-
-.total-spent .amount {
+  color: white;
   font-weight: 600;
   font-size: 1rem;
 }
 
-.member-avatars {
+.friend-name {
+  font-size: 0.75rem;
+  color: #64748b;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.history-card {
+  background: white;
+  padding: 1rem 1.25rem;
+  border-radius: 20px;
+}
+
+.card-top {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.item-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.item-icon.coffee { background: #f8fafc; color: #64748b; }
+.item-icon.food { background: #fee2e2; color: #ef4444; }
+.item-icon.music { background: #ecfdf5; color: #10b981; }
+
+.item-info {
+  flex: 1;
+}
+
+.item-info h4 {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 0.125rem;
+}
+
+.item-info p {
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.item-members {
   display: flex;
   align-items: center;
 }
 
 .mini-avatar {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
-  border: 2px solid var(--surface);
+  border: 2px solid white;
   margin-left: -8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.75rem;
+  font-size: 0.65rem;
   font-weight: 600;
   color: white;
 }
 
 .mini-avatar:first-child { margin-left: 0; }
-.mini-avatar.more {
-  background: var(--surface-light);
-  color: var(--text-muted);
-  font-size: 0.65rem;
+.mini-avatar.more { background: #f1f5f9; color: #64748b; }
+
+.card-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 0.75rem;
+  border-top: 1px dashed #f1f5f9;
 }
 
-@media (max-width: 640px) {
-  .welcome-section {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 1rem;
-  }
-  .welcome-section .btn {
-    width: 100%;
+.total-info .label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.status-badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+}
+
+.paid-20 { color: #f59e0b; }
+.paid-100 { color: #10b981; }
+
+.activity-amount {
+  font-weight: 700;
+  color: var(--primary);
+  font-size: 1rem;
+}
+
+.empty-feed {
+  padding: 3rem;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.item-icon.group_created { background: #eef2ff; color: #6366f1; }
+.item-icon.expense_added { background: #fef2f2; color: #ef4444; }
+
+.empty-friends-hint {
+  padding: 1rem;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.modal-content {
+  width: 100%;
+  max-width: 450px;
+  background: white;
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-header h3 { font-size: 1.25rem; font-weight: 700; }
+.close-btn { background: none; border: none; font-size: 1.5rem; color: var(--text-muted); cursor: pointer; }
+
+.modal-body p {
+  color: var(--text-muted);
+  font-size: 0.9375rem;
+  margin-bottom: 1.5rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.form-group label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+}
+
+.slide-up-modal {
+  animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* Desktop view adjustments */
+@media (min-width: 768px) {
+  .dashboard-ref {
+    max-width: 1000px;
+    padding: 2rem;
   }
 }
 </style>

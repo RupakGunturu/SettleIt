@@ -43,25 +43,48 @@ const router = createRouter({
         {
             path: '/groups',
             name: 'Groups',
-            component: () => import('../views/Dashboard.vue') // For now, reuse dashboard
+            component: () => import('../views/Groups.vue')
+        },
+        {
+            path: '/about',
+            name: 'About',
+            component: () => import('../views/About.vue'),
+            meta: { public: true }
         }
     ]
 })
 
 router.beforeEach(async (to, from, next) => {
     const authStore = useAuthStore()
-    // Ensure auth is initialized
+
+    // Wait for auth to initialize if it's still loading
     if (authStore.loading) {
-        // Basic wait or just proceed if initialization is handled in main.js/App.vue
+        // We can't use await here because authStore.init() is usually called in App.vue
+        // and onAuthStateChanged is async. We need a way to wait for loading to be false.
     }
 
-    const isAuthenticated = !!authStore.user
-    if (!to.meta.public && !isAuthenticated) {
-        next({ name: 'Login' })
-    } else if (to.name === 'Login' && isAuthenticated) {
-        next({ name: 'Dashboard' })
+    // A better approach for the guard:
+    const checkAuth = () => {
+        const isAuthenticated = !!authStore.user
+        if (!to.meta.public && !isAuthenticated) {
+            next({ name: 'Login' })
+        } else if (to.name === 'Login' && isAuthenticated) {
+            next({ name: 'Dashboard' })
+        } else {
+            next()
+        }
+    }
+
+    if (authStore.loading) {
+        // Simple polling/watch-like mechanism for the guard
+        const unwatch = authStore.$subscribe((mutation, state) => {
+            if (!state.loading) {
+                unwatch()
+                checkAuth()
+            }
+        })
     } else {
-        next()
+        checkAuth()
     }
 })
 

@@ -1,4 +1,9 @@
-import { auth } from '../firebase'
+import { auth, db } from '../firebase'
+import {
+    collection,
+    doc,
+    setDoc
+} from 'firebase/firestore'
 import {
     createUserWithEmailAndPassword,
     signInWithEmailAndPassword,
@@ -11,8 +16,22 @@ export const authService = {
     async register(email, password, name) {
         if (!auth) throw new Error("Firebase Auth not initialized. Check your config in firebase.js")
         const userCredential = await createUserWithEmailAndPassword(auth, email, password)
-        await updateProfile(userCredential.user, { displayName: name })
-        return userCredential.user
+        const user = userCredential.user
+
+        await updateProfile(user, { displayName: name })
+
+        // Create user document in Firestore
+        if (db) {
+            await setDoc(doc(db, 'users', user.uid), {
+                uid: user.uid,
+                displayName: name,
+                email: email,
+                photoURL: user.photoURL || null,
+                createdAt: new Date().toISOString()
+            })
+        }
+
+        return user
     },
 
     async login(email, password) {
