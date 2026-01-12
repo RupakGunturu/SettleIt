@@ -47,12 +47,18 @@ watch(() => appStore.searchQuery, async (newQuery) => {
 })
 
 const navigateToResult = (path) => {
+  if (!path || path.includes('undefined') || path.endsWith('/group/')) return
   appStore.searchQuery = ''
   router.push(path)
 }
 
 onMounted(() => {
   authStore.init()
+  
+  // Listen for Firestore index errors
+  window.addEventListener('firestore-error', (e) => {
+    toastStore.error(e.detail)
+  })
 })
 
 const handleLogout = async () => {

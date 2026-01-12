@@ -37,6 +37,15 @@ export const useAuthStore = defineStore('auth', () => {
         }
     }
 
+    const updateProfile = async (name) => {
+        await authService.updateUserProfile(name)
+        // Profile updates don't always trigger onAuthStateChanged immediately 
+        // with the new data in some Firebase versions/configs, so we can force a local update
+        if (user.value) {
+            user.value = { ...user.value, displayName: name }
+        }
+    }
+
     return {
         user,
         loading,
@@ -45,6 +54,7 @@ export const useAuthStore = defineStore('auth', () => {
         register,
         login,
         logout,
-        initDemoSession
+        initDemoSession,
+        updateProfile
     }
 })

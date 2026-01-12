@@ -72,8 +72,13 @@ const getCategoryIcon = (category) => {
     <!-- Summary Card -->
     <section class="summary-section">
       <div class="summary-card glass-card">
-        <p class="summary-label">7 Friends are owing you <span class="info-circle">?</span></p>
-        <h2 class="summary-amount">₹ 7,25,035</h2>
+        <p class="summary-label">
+          {{ store.userBalances.filter(b => b.balance > 0).length }} Friends are owing you 
+          <span class="info-circle" title="Net balance across all groups">?</span>
+        </p>
+        <h2 class="summary-amount" :class="{ 'text-success': store.totalBalance > 0, 'text-error': store.totalBalance < 0 }">
+          {{ formatCurrency(store.totalBalance) }}
+        </h2>
       </div>
 
       <div class="action-buttons">

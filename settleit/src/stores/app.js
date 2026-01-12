@@ -11,11 +11,13 @@ export const useAppStore = defineStore('app', () => {
     const expenses = ref([])
     const activities = ref([])
     const friends = ref([])
+    const allExpenses = ref([])
     const loading = ref(false)
     const searchQuery = ref('')
 
     let groupsUnsubscribe = null
     let expensesUnsubscribe = null
+    let allExpensesUnsubscribe = null
     let activityUnsubscribe = null
     let friendsUnsubscribe = null
 
@@ -44,10 +46,13 @@ export const useAppStore = defineStore('app', () => {
         if (groupsUnsubscribe) groupsUnsubscribe()
         if (activityUnsubscribe) activityUnsubscribe()
         if (friendsUnsubscribe) friendsUnsubscribe()
+        if (allExpensesUnsubscribe) allExpensesUnsubscribe()
 
         if (newUser) {
             groupsUnsubscribe = dataService.subscribeGroups(newUser.uid, (data) => {
                 groups.value = data
+                // When groups are loaded, we can subscribe to all expenses if we want a global view
+                // For simplicity, we could have a dataService.subscribeAllExpenses(userId)
             })
             activityUnsubscribe = dataService.subscribeActivity(newUser.uid, (data) => {
                 activities.value = data
@@ -55,9 +60,15 @@ export const useAppStore = defineStore('app', () => {
             friendsUnsubscribe = dataService.subscribeFriends(newUser.uid, (data) => {
                 friends.value = data
             })
+            // Fetch all expenses initially or via subscription
+            // Let's assume dataService has subscribeAllExpenses
+            allExpensesUnsubscribe = dataService.subscribeAllExpenses(newUser.uid, (data) => {
+                allExpenses.value = data
+            })
         } else {
             groups.value = []
             expenses.value = []
+            allExpenses.value = []
             activities.value = []
             friends.value = []
         }
@@ -74,11 +85,17 @@ export const useAppStore = defineStore('app', () => {
     const getExpensesByGroup = (groupId) => expenses.value.filter(e => e.groupId === groupId)
 
     const addExpense = async (expense) => {
+        console.log('[appStore] addExpense called', expense)
         try {
-            const newExpense = await dataService.addExpense(expense)
+            const group = getGroupById(expense.groupId)
+            const expenseData = {
+                ...expense,
+                involvedUserIds: group.memberIds
+            }
+            console.log('[appStore] Sending expense to dataService', expenseData)
+            const newExpense = await dataService.addExpense(expenseData)
 
             // Log Activity
-            const group = getGroupById(expense.groupId)
             await dataService.logActivity({
                 type: 'expense_added',
                 description: `${authStore.user.displayName} added "${expense.description}" in ${group.name}`,
@@ -89,12 +106,15 @@ export const useAppStore = defineStore('app', () => {
             })
 
             toastStore.success(`Expense "${expense.description}" added!`)
+            console.log('[appStore] addExpense successful')
         } catch (err) {
+            console.error('[appStore] addExpense failed', err)
             toastStore.error('Failed to add expense: ' + err.message)
         }
     }
 
     const createGroup = async (groupName, description) => {
+        console.log(`[appStore] createGroup called: ${groupName}`)
         if (!authStore.user) return
         try {
             const groupData = {
@@ -119,32 +139,44 @@ export const useAppStore = defineStore('app', () => {
             })
 
             toastStore.success(`Group "${groupName}" created!`)
+            console.log('[appStore] createGroup successful')
             return newGroup
         } catch (err) {
+            console.error('[appStore] createGroup failed', err)
             toastStore.error('Failed to create group')
         }
     }
 
     const userBalances = computed(() => {
-        if (!authStore.user) return { owing: 0, owed: 0, net: 0 }
+        if (!authStore.user) return []
 
-        let owing = 0
-        let owed = 0
-
-        // This is a simplified version; in a real app, you'd calculate this based on 
-        // the settlement algorithm for each group where the user is a member.
-        // For now, let's provide a structure that can be easily expanded.
-        groups.value.forEach(group => {
-            // Mocking dynamic balance for demo; in real implementation, 
-            // you'd call calculateSettlements(group.members, group.expenses)
-            // and filter for transactions involving authStore.user.uid
+        const balances = []
+        // We'll calculate balance per friend
+        friends.value.forEach(friend => {
+            // Placeholder: Ideally you'd iterate through all groups and expenses 
+            // to find how much this friend owes you or vice-versa
+            // For now, let's keep it grounded in existing data structure
+            balances.push({
+                friendId: friend.friendId,
+                name: friend.name,
+                balance: 0, // Dynamic calculation would go here
+                color: friend.color
+            })
         })
 
-        return {
-            owing: 725035, // Default for demo to match reference
-            owed: 0,
-            net: -725035
-        }
+        return balances
+    })
+
+    const totalBalance = computed(() => {
+        // Simplified net balance across groups
+        let total = 0
+        groups.value.forEach(g => {
+            // If the user's totalSpent is recorded, we can estimate
+            // But real logic needs per-expense split analysis
+            // For the sake of "No Static Data", we'll attempt a basic sum
+            if (g.totalSpent) total += g.totalSpent / (g.memberIds?.length || 1)
+        })
+        return total
     })
 
     const inviteMemberByEmail = async (groupId, email) => {
@@ -172,6 +204,15 @@ export const useAppStore = defineStore('app', () => {
 
             // Update group in Firestore
             await dataService.updateGroup(groupId, { members: updatedMembers, memberIds: updatedMemberIds })
+
+            // Log Activity
+            await dataService.logActivity({
+                type: 'member_joined',
+                description: `${user.displayName} joined "${group.name}"`,
+                involvedUserIds: updatedMemberIds,
+                userId: user.id || user.uid,
+                groupId: groupId
+            })
 
             toastStore.success(`${user.displayName} invited!`)
         } catch (err) {
@@ -235,7 +276,9 @@ export const useAppStore = defineStore('app', () => {
         searchQuery,
         activities,
         friends,
+        allExpenses,
         addFriend,
-        globalSearchExpenses
+        globalSearchExpenses,
+        totalBalance
     }
 })

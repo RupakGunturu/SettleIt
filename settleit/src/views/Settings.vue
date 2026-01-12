@@ -1,6 +1,7 @@
 <script setup>
 import { ref } from 'vue'
 import { useAuthStore } from '../stores/auth'
+import { useToastStore } from '../stores/toast'
 import { 
   User, 
   Settings as SettingsIcon, 
@@ -14,7 +15,9 @@ import {
 } from 'lucide-vue-next'
 
 const authStore = useAuthStore()
+const toastStore = useToastStore()
 const isEditingProfile = ref(false)
+const isUpdating = ref(false)
 
 const profileForm = ref({
   displayName: authStore.user?.displayName || '',
@@ -31,10 +34,19 @@ const settings = ref({
 document.documentElement.setAttribute('data-theme', 'light')
 localStorage.setItem('theme', 'Light')
 
-const handleUpdateProfile = () => {
-  // Logic to update profile would go here
-  isEditingProfile.value = false
-  alert('Profile updated! (Simulation)')
+const handleUpdateProfile = async () => {
+  if (!profileForm.value.displayName) return
+  
+  isUpdating.value = true
+  try {
+    await authStore.updateProfile(profileForm.value.displayName)
+    isEditingProfile.value = false
+    toastStore.success('Profile updated successfully!')
+  } catch (err) {
+    toastStore.error('Failed to update profile')
+  } finally {
+    isUpdating.value = false
+  }
 }
 
 const handleLogout = async () => {
@@ -83,7 +95,13 @@ const handleLogout = async () => {
             </div>
             <div class="form-actions">
               <button class="btn btn-secondary" @click="isEditingProfile = false">Cancel</button>
-              <button class="btn btn-primary" @click="handleUpdateProfile">Save Changes</button>
+              <button 
+                class="btn btn-primary" 
+                :disabled="isUpdating || !profileForm.displayName"
+                @click="handleUpdateProfile"
+              >
+                {{ isUpdating ? 'Saving...' : 'Save Changes' }}
+              </button>
             </div>
           </div>
         </div>

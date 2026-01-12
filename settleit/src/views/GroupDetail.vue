@@ -1,7 +1,7 @@
 <script setup>
 import { useAppStore } from '../stores/app'
 import { useRoute, useRouter } from 'vue-router'
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { 
   ArrowLeft, 
   Plus, 

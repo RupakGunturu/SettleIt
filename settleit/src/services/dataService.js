@@ -18,18 +18,24 @@ export const dataService = {
     // Real-time Subscriptions
     subscribeGroups(userId, callback) {
         if (!db) return () => { }
+        console.log(`[dataService] Subscribing to groups for user: ${userId}`)
         const q = query(collection(db, 'groups'), where('memberIds', 'array-contains', userId))
         return onSnapshot(q, (snapshot) => {
             const groups = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+            console.log(`[dataService] Received ${groups.length} groups update`)
             callback(groups)
+        }, (err) => {
+            console.error('[dataService] Firestore Subscribe Groups Error:', err)
         })
     },
 
     subscribeExpenses(groupId, callback) {
         if (!db) return () => { }
+        console.log(`[dataService] Subscribing to expenses for group: ${groupId}`)
         const q = query(collection(db, 'expenses'), where('groupId', '==', groupId))
         return onSnapshot(q, (snapshot) => {
             const expenses = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+            console.log(`[dataService] Received ${expenses.length} expenses update`)
             callback(expenses)
         })
     },
@@ -45,6 +51,12 @@ export const dataService = {
         return onSnapshot(q, (snapshot) => {
             const activities = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
             callback(activities)
+        }, (err) => {
+            if (err.code === 'failed-precondition') {
+                window.dispatchEvent(new CustomEvent('firestore-error', {
+                    detail: 'Please create the required Firestore index via the link in console.'
+                }))
+            }
         })
     },
 
@@ -59,14 +71,17 @@ export const dataService = {
 
     async addFriend(userId, friendUser) {
         if (!db) return
-        await addDoc(collection(db, 'friends'), {
+        console.log(`[dataService] Adding friend: ${friendUser.email} for user: ${userId}`)
+        const friendData = {
             userId,
             friendId: friendUser.id || friendUser.uid,
             name: friendUser.displayName || friendUser.name,
             email: friendUser.email,
             color: '#' + Math.floor(Math.random() * 16777215).toString(16),
             addedAt: serverTimestamp()
-        })
+        }
+        await addDoc(collection(db, 'friends'), friendData)
+        console.log(`[dataService] Friend added successfully`)
     },
 
     async searchAllExpenses(userId, queryText) {
@@ -83,12 +98,27 @@ export const dataService = {
             .filter(e => e.description.toLowerCase().includes(queryText.toLowerCase()))
     },
 
+    subscribeAllExpenses(userId, callback) {
+        if (!db) return () => { }
+        const q = query(
+            collection(db, 'expenses'),
+            where('involvedUserIds', 'array-contains', userId),
+            orderBy('date', 'desc')
+        )
+        return onSnapshot(q, (snapshot) => {
+            const expenses = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+            callback(expenses)
+        })
+    },
+
     async logActivity(activityData) {
         if (!db) return
+        console.log(`[dataService] Logging activity: ${activityData.type}`, activityData)
         await addDoc(collection(db, 'activity'), {
             ...activityData,
             timestamp: serverTimestamp()
         })
+        console.log(`[dataService] Activity logged`)
     },
     // Groups
     async getGroups(userId) {
@@ -114,7 +144,9 @@ export const dataService = {
 
     async createGroup(groupData) {
         if (!db) return { id: Date.now().toString(), ...groupData }
+        console.log(`[dataService] Creating group: ${groupData.name}`)
         const docRef = await addDoc(collection(db, 'groups'), groupData)
+        console.log(`[dataService] Group created with ID: ${docRef.id}`)
         return { id: docRef.id, ...groupData }
     },
 
@@ -162,7 +194,9 @@ export const dataService = {
 
     async addExpense(expenseData) {
         if (!db) return { id: Date.now().toString(), ...expenseData }
+        console.log(`[dataService] Adding expense: ${expenseData.description}`, expenseData)
         const docRef = await addDoc(collection(db, 'expenses'), expenseData)
+        console.log(`[dataService] Expense added with ID: ${docRef.id}`)
         return { id: docRef.id, ...expenseData }
     },
 

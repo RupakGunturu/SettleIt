@@ -23,24 +23,40 @@ onMounted(async () => {
 })
 
 const totalSpent = computed(() => {
-  return store.groups.reduce((sum, g) => sum + (g.totalSpent || 0), 0)
+  return store.allExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0)
 })
 
 const categoryData = computed(() => {
-  // Aggregate from all expenses across groups
   const cats = {}
-  store.groups.forEach(group => {
-    // In a real app, we'd fetch all expenses here or use store.expenses
-    // For now, let's use the mock logic if expenses aren't loaded
+  store.allExpenses.forEach(e => {
+    const cat = e.category || 'Other'
+    if (!cats[cat]) cats[cat] = 0
+    cats[cat] += Number(e.amount) || 0
   })
   
-  // Mock aggregation for demo
-  return [
-    { id: 'Coffee', icon: Coffee, color: '#6366f1', amount: 1453035, percent: 45 },
-    { id: 'Food', icon: Utensils, color: '#ef4444', amount: 250750, percent: 25 },
-    { id: 'Music', icon: Music, color: '#10b981', amount: 567000, percent: 20 },
-    { id: 'Other', icon: Camera, color: '#f59e0b', amount: 100000, percent: 10 }
-  ]
+  const icons = {
+    'Coffee': Coffee,
+    'Food': Utensils,
+    'Shopping': ShoppingBag,
+    'Music': Music,
+    'Other': Camera
+  }
+  
+  const colors = {
+    'Coffee': '#6366f1',
+    'Food': '#ef4444',
+    'Shopping': '#10b981',
+    'Music': '#8b5cf6',
+    'Other': '#f59e0b'
+  }
+
+  return Object.keys(cats).map(id => ({
+    id,
+    amount: cats[id],
+    percent: Math.round((cats[id] / (totalSpent.value || 1)) * 100),
+    icon: icons[id] || Camera,
+    color: colors[id] || '#94a3b8'
+  })).sort((a, b) => b.amount - a.amount)
 })
 
 const formatCurrency = (amount) => {
@@ -52,11 +68,12 @@ const formatCurrency = (amount) => {
 }
 
 const exportCSV = () => {
-  const headers = ['Date', 'Description', 'Category', 'Amount', 'Paid By']
-  const rows = store.groups.flatMap(g => [
-    ['2023-12-16', 'Ngopi ever', 'Coffee', '1453035', 'Yth Rizal'],
-    ['2023-12-12', 'Pizza time', 'Food', '250750', 'Lina Punk'],
-    ['2023-12-02', 'Spotify Family', 'Music', '567000', 'You']
+  const headers = ['Date', 'Description', 'Category', 'Amount']
+  const rows = store.allExpenses.map(e => [
+    e.date,
+    e.description,
+    e.category,
+    e.amount
   ])
 
   let csvContent = "data:text/csv;charset=utf-8," 

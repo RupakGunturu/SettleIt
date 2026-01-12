@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useAppStore } from '../stores/app'
+import { useAuthStore } from '../stores/auth'
 import { useRouter, useRoute } from 'vue-router'
 import { 
   ArrowLeft, 
@@ -16,6 +17,7 @@ import {
 } from 'lucide-vue-next'
 
 const store = useAppStore()
+const authStore = useAuthStore()
 const router = useRouter()
 const route = useRoute()
 
@@ -34,7 +36,8 @@ const categories = [
 ]
 
 // Default to first group if none specified
-const groupId = ref(store.groups[0]?.id || '')
+// Default to first group or route param
+const groupId = ref(route.query.groupId || store.groups[0]?.id || '')
 const selectedGroup = computed(() => store.getGroupById(groupId.value))
 const members = computed(() => selectedGroup.value?.members || [])
 
@@ -45,10 +48,11 @@ onMounted(async () => {
   if (store.groups.length === 0) {
     await store.fetchGroups()
   }
-  if (store.groups.length > 0) {
-    groupId.value = store.groups[0].id
-    // Initialize split with all members
-    splitMembers.value = [...selectedGroup.value.members.map(m => m.id)]
+  
+  const initialGroupId = route.query.groupId || store.groups[0]?.id
+  if (initialGroupId) {
+    groupId.value = initialGroupId
+    splitMembers.value = [...(store.getGroupById(initialGroupId)?.memberIds || [])]
   }
 })
 
@@ -85,7 +89,7 @@ const handleNext = async () => {
     category: selectedCategory.value,
     items: items.value.map(i => ({ ...i })),
     splitWith: splitMembers.value,
-    paidBy: store.authStore?.user?.uid || 'guest_user'
+    paidBy: authStore.user?.uid
   }
 
   await store.addExpense(expenseData)
@@ -129,19 +133,22 @@ const handleNext = async () => {
         </div>
       </div>
 
+      <!-- Select Group -->
+      <div v-if="store.groups.length > 1" class="input-section">
+        <label>Select Group</label>
+        <select v-model="groupId" class="main-input">
+          <option v-for="g in store.groups" :key="g.id" :value="g.id">
+            {{ g.name }}
+          </option>
+        </select>
+      </div>
+
       <!-- Split With -->
       <div class="input-section">
         <label>Split With</label>
         <div class="members-list">
-          <!-- Current User -->
-          <div class="member-chip active">
-            <div class="avatar" style="background-color: #6366f1">Y</div>
-            <span>You</span>
-          </div>
-          
-          <!-- Group Members -->
           <div 
-            v-for="member in members.filter(m => m.id !== 'guest_user')" 
+            v-for="member in members" 
             :key="member.id"
             class="member-chip"
             :class="{ active: splitMembers.includes(member.id) }"
@@ -150,14 +157,8 @@ const handleNext = async () => {
             <div class="avatar" :style="{ backgroundColor: member.color }">
               {{ member.name[0] }}
             </div>
-            <span>{{ member.name }}</span>
-            <div v-if="splitMembers.includes(member.id)" class="remove-dot">−</div>
-          </div>
-
-          <!-- Add New -->
-          <div class="member-chip add-new">
-            <div class="avatar dashed"><Plus :size="16" /></div>
-            <span>Add New</span>
+            <span>{{ member.id === authStore.user?.uid ? 'You' : member.name }}</span>
+            <div v-if="splitMembers.includes(member.id)" class="remove-dot">✓</div>
           </div>
         </div>
       </div>
