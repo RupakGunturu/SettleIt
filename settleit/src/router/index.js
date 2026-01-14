@@ -5,15 +5,27 @@ const router = createRouter({
     history: createWebHistory(),
     routes: [
         {
+            path: '/',
+            name: 'Landing',
+            component: () => import('../views/Landing.vue'),
+            meta: { public: true }
+        },
+        {
+            path: '/dashboard',
+            name: 'Dashboard',
+            component: () => import('../views/Dashboard.vue')
+        },
+        {
             path: '/login',
             name: 'Login',
             component: () => import('../views/Login.vue'),
             meta: { public: true }
         },
         {
-            path: '/',
-            name: 'Dashboard',
-            component: () => import('../views/Dashboard.vue')
+            path: '/signup',
+            name: 'Signup',
+            component: () => import('../views/Login.vue'),
+            meta: { public: true }
         },
         {
             path: '/group/:id',
@@ -44,6 +56,11 @@ const router = createRouter({
             path: '/groups',
             name: 'Groups',
             component: () => import('../views/Groups.vue')
+        },
+        {
+            path: '/activity',
+            name: 'Activity',
+            component: () => import('../views/Activity.vue')
         },
         {
             path: '/about',
@@ -82,7 +99,7 @@ router.beforeEach(async (to) => {
         return { name: 'Login' }
     }
 
-    if (to.name === 'Login' && isAuthenticated) {
+    if ((to.name === 'Login' || to.name === 'Signup') && isAuthenticated) {
         return { name: 'Dashboard' }
     }
 

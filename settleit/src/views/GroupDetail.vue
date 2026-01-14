@@ -14,7 +14,13 @@ import {
   ShoppingBag,
   MoreVertical,
   Users,
-  Trash2
+  Trash2,
+  Tv,
+  Stethoscope,
+  BookOpen,
+  Plane,
+  Coffee,
+  FileText
 } from 'lucide-vue-next'
 
 const store = useAppStore()
@@ -61,9 +67,14 @@ const formatCurrency = (amount, currency = 'INR') => {
 const getCategoryIcon = (category) => {
   switch (category?.toLowerCase()) {
     case 'food': return Utensils
+    case 'coffee': return Coffee
+    case 'groceries': return ShoppingBag
     case 'transport': return Car
     case 'utilities': return Home
-    case 'shopping': return ShoppingBag
+    case 'entertainment': return Tv
+    case 'health': return Stethoscope
+    case 'education': return BookOpen
+    case 'travel': return Plane
     default: return Receipt
   }
 }
@@ -144,7 +155,7 @@ const getMemberColor = (id) => group.value?.members.find(m => m.id === id)?.colo
     <section class="expenses-section">
       <div class="section-header">
         <div class="title-with-count">
-          <h2>Expenses</h2>
+          <h2>Group Ledger</h2>
           <span class="count-badge">{{ expenses.length }}</span>
         </div>
         <button class="filter-btn">
@@ -166,9 +177,13 @@ const getMemberColor = (id) => group.value?.members.find(m => m.id === id)?.colo
           <div class="expense-info">
             <h4 class="expense-desc">{{ expense.description }}</h4>
             <p class="expense-meta">
-              Paid by <span class="payer" :style="{ color: getMemberColor(expense.paidBy) }">{{ getMemberName(expense.paidBy) }}</span> 
-              • {{ new Date(expense.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) }}
-            </p>
+                Paid by <span class="payer" :style="{ color: getMemberColor(expense.paidBy) }">{{ getMemberName(expense.paidBy) }}</span> 
+                • {{ new Date(expense.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) }}
+                <span v-if="expense.documentUrl" class="doc-badge-inline" title="Has receipt">
+                  <FileText :size="10" />
+                  Doc
+                </span>
+              </p>
           </div>
           
           <div class="expense-amount-box">
@@ -356,9 +371,15 @@ const getMemberColor = (id) => group.value?.members.find(m => m.id === id)?.colo
   color: var(--text-muted);
 }
 
-.expense-icon.food { background: rgba(236, 72, 153, 0.1); color: var(--secondary); }
-.expense-icon.transport { background: rgba(245, 158, 11, 0.1); color: var(--accent); }
-.expense-icon.utilities { background: rgba(99, 102, 241, 0.1); color: var(--primary); }
+.expense-icon.food { background: rgba(236, 72, 153, 0.1); color: #ec4899; }
+.expense-icon.coffee { background: rgba(139, 92, 246, 0.1); color: #8b5cf6; }
+.expense-icon.groceries { background: rgba(16, 185, 129, 0.1); color: #10b981; }
+.expense-icon.transport { background: rgba(245, 158, 11, 0.1); color: #f59e0b; }
+.expense-icon.utilities { background: rgba(99, 102, 241, 0.1); color: #6366f1; }
+.expense-icon.entertainment { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
+.expense-icon.health { background: rgba(6, 182, 212, 0.1); color: #06b6d4; }
+.expense-icon.education { background: rgba(59, 130, 246, 0.1); color: #3b82f6; }
+.expense-icon.travel { background: rgba(14, 165, 233, 0.1); color: #0ea5e9; }
 
 .expense-info {
   flex: 1;
@@ -482,5 +503,19 @@ const getMemberColor = (id) => group.value?.members.find(m => m.id === id)?.colo
 .slide-enter-from, .slide-leave-to {
   opacity: 0;
   transform: translateY(-10px);
+}
+
+.doc-badge-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #10b981;
+  background: #10b98110;
+  padding: 1px 4px;
+  border-radius: 3px;
+  margin-left: 0.5rem;
+  vertical-align: middle;
 }
 </style>

@@ -1,11 +1,12 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useAuthStore } from '../stores/auth'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { Mail, Lock, User, LogIn, UserPlus, Loader2 } from 'lucide-vue-next'
 
 const authStore = useAuthStore()
 const router = useRouter()
+const route = useRoute()
 
 const isLogin = ref(true)
 const loading = ref(false)
@@ -17,6 +18,15 @@ const form = ref({
   name: ''
 })
 
+onMounted(() => {
+  if (route.query.email) {
+    form.value.email = route.query.email
+  }
+  if (route.query.mode === 'signup' || route.name === 'Signup') {
+    isLogin.value = false
+  }
+})
+
 const handleSubmit = async () => {
   loading.value = true
   error.value = ''
@@ -26,7 +36,7 @@ const handleSubmit = async () => {
     } else {
       await authStore.register(form.value.email, form.value.password, form.value.name)
     }
-    router.push('/')
+    router.push('/dashboard')
   } catch (err) {
     console.error(err)
     error.value = err.message || 'Authentication failed'

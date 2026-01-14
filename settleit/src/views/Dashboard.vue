@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, computed } from 'vue'
 import { useAppStore } from '../stores/app'
 import { useRouter } from 'vue-router'
 import { 
@@ -55,6 +55,25 @@ const getCategoryIcon = (category) => {
     case 'music': return Music
     default: return Camera
   }
+}
+
+const sortedActivities = computed(() => {
+  return [...store.activities].sort((a, b) => {
+    const dateA = a.timestamp?.toDate ? a.timestamp.toDate() : new Date(a.date || 0)
+    const dateB = b.timestamp?.toDate ? b.timestamp.toDate() : new Date(b.date || 0)
+    return dateB - dateA
+  })
+})
+
+const formatDate = (timestamp) => {
+  if (!timestamp) return 'Just now'
+  const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp)
+  return date.toLocaleDateString('en-IN', { 
+    month: 'short', 
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
 }
 </script>
 
@@ -117,31 +136,34 @@ const getCategoryIcon = (category) => {
     <section class="history-section">
       <div class="section-header">
         <h3>Activity Feed</h3>
-        <button class="see-more">View All</button>
+        <button class="see-more" @click="router.push('/activity')">View All</button>
       </div>
 
       <div class="history-list">
         <div 
-          v-for="activity in store.activities" 
+          v-for="activity in sortedActivities" 
           :key="activity.id" 
           class="history-card glass-card"
+          @click="activity.groupId ? router.push(`/group/${activity.groupId}`) : null"
         >
           <div class="card-top">
             <div class="item-icon" :class="activity.type">
-              <Activity v-if="activity.type === 'group_created'" :size="20" />
+              <Activity v-if="activity.type === 'expense_added'" :size="20" />
+              <Users v-else-if="activity.type === 'group_created' || activity.type === 'member_joined'" :size="20" />
               <History v-else :size="20" />
             </div>
             <div class="item-info">
               <h4>{{ activity.description }}</h4>
-              <p>{{ activity.timestamp ? new Date(activity.timestamp.toDate()).toLocaleString() : 'Just now' }}</p>
+              <p>{{ formatDate(activity.timestamp) }}</p>
             </div>
             <div v-if="activity.amount" class="activity-amount">
               {{ formatCurrency(activity.amount) }}
             </div>
+            <ChevronRight :size="16" class="arrow-icon" />
           </div>
         </div>
 
-        <div v-if="store.activities.length === 0" class="empty-feed glass-card">
+        <div v-if="sortedActivities.length === 0" class="empty-feed glass-card">
           <p>No recent activity. Start by adding an expense!</p>
         </div>
       </div>
@@ -469,6 +491,14 @@ const getCategoryIcon = (category) => {
 
 .item-icon.group_created { background: #eef2ff; color: #6366f1; }
 .item-icon.expense_added { background: #fef2f2; color: #ef4444; }
+.item-icon.member_joined { background: #ecfdf5; color: #10b981; }
+
+.history-card {
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+.history-card:hover { transform: scale(1.02); }
+.arrow-icon { color: #cbd5e1; margin-left: 0.5rem; }
 
 .empty-friends-hint {
   padding: 1rem;

@@ -46,7 +46,7 @@ export const dataService = {
             collection(db, 'activity'),
             where('involvedUserIds', 'array-contains', userId),
             orderBy('timestamp', 'desc'),
-            limit(20)
+            limit(100)
         )
         return onSnapshot(q, (snapshot) => {
             const activities = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))

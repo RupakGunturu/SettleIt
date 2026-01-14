@@ -12,7 +12,8 @@ import {
   Bell,
   Search,
   ChevronRight,
-  Info
+  Info,
+  Activity
 } from 'lucide-vue-next'
 import { useAppStore } from './stores/app'
 import { useToastStore } from './stores/toast'
@@ -63,24 +64,25 @@ onMounted(() => {
 
 const handleLogout = async () => {
   await authStore.logout()
-  router.push('/about')
+  router.push('/')
 }
 
 const navLinks = [
-  { name: 'Dashboard', path: '/', icon: Home },
+  { name: 'Dashboard', path: '/dashboard', icon: Home },
+  { name: 'Activity', path: '/activity', icon: Activity },
   { name: 'Groups', path: '/groups', icon: Users },
   { name: 'Stats', path: '/reports', icon: BarChart3 },
-  { name: 'About', path: '/about', icon: Info },
-  { name: 'Settings', path: '/settings', icon: Settings },
+  // { name: 'About', path: '/about', icon: Info },
+  // { name: 'Settings', path: '/settings', icon: Settings },
 ]
 </script>
 
 <template>
-  <div class="app-layout" :class="{ 'auth-layout': !authStore.user || route.name === 'Login' }">
+  <div class="app-layout" :class="{ 'auth-layout': !authStore.user || ['Login', 'Landing', 'About'].includes(route.name) }">
     <!-- Desktop Sidebar -->
-    <aside v-if="authStore.user && route.name !== 'Login'" class="sidebar">
+    <aside v-if="authStore.user && !['Login', 'Landing', 'About'].includes(route.name)" class="sidebar">
       <div class="sidebar-header">
-        <div class="logo" @click="router.push('/')">
+        <div class="logo" @click="router.push('/dashboard')">
           <span class="logo-icon">S</span>
           <span class="logo-text">SettleIt</span>
         </div>
@@ -119,7 +121,7 @@ const navLinks = [
 
     <div class="main-wrapper">
       <!-- Desktop Top Header -->
-      <header v-if="authStore.user && route.name !== 'Login'" class="top-header desktop-only">
+      <header v-if="authStore.user && !['Login', 'Landing', 'About'].includes(route.name)" class="top-header desktop-only">
         <div class="header-search">
           <Search :size="18" />
           <input v-model="appStore.searchQuery" type="text" placeholder="Search expenses, groups...">
@@ -174,7 +176,7 @@ const navLinks = [
         </div>
       </header>
 
-      <main class="main-content" :class="{ 'with-sidebar': authStore.user && route.name !== 'Login' }">
+      <main class="main-content" :class="{ 'with-sidebar': authStore.user && !['Login', 'Landing', 'About'].includes(route.name) }">
         <router-view v-slot="{ Component }">
           <transition name="fade" mode="out-in">
             <component :is="Component" />
@@ -183,26 +185,25 @@ const navLinks = [
       </main>
     </div>
 
-    <!-- Mobile Bottom Nav -->
-    <nav v-if="authStore.user && route.name !== 'Login'" class="mobile-nav glass-card">
-      <router-link to="/" class="mobile-link" active-class="active">
+    <nav v-if="authStore.user && !['Login', 'Landing', 'About'].includes(route.name)" class="mobile-nav glass-card">
+      <router-link to="/dashboard" class="mobile-link" active-class="active">
         <Home :size="22" />
         <span>Home</span>
+      </router-link>
+      <router-link to="/activity" class="mobile-link" active-class="active">
+        <Activity :size="22" />
+        <span>Activity</span>
+      </router-link>
+      <router-link to="/add-expense" class="mobile-link add-btn">
+        <PlusCircle :size="28" />
       </router-link>
       <router-link to="/groups" class="mobile-link" active-class="active">
         <Users :size="22" />
         <span>Groups</span>
       </router-link>
-      <router-link to="/add-expense" class="mobile-link add-btn">
-        <PlusCircle :size="28" />
-      </router-link>
       <router-link to="/reports" class="mobile-link" active-class="active">
         <BarChart3 :size="22" />
         <span>Stats</span>
-      </router-link>
-      <router-link to="/settings" class="mobile-link" active-class="active">
-        <Settings :size="22" />
-        <span>Settings</span>
       </router-link>
     </nav>
 

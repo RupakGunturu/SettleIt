@@ -87,22 +87,28 @@ export const useAppStore = defineStore('app', () => {
     const addExpense = async (expense) => {
         console.log('[appStore] addExpense called', expense)
         try {
-            const group = getGroupById(expense.groupId)
+            const group = expense.groupId ? getGroupById(expense.groupId) : null
+            const involvedUserIds = group ? group.memberIds : [authStore.user.uid]
+
             const expenseData = {
                 ...expense,
-                involvedUserIds: group.memberIds
+                involvedUserIds
             }
             console.log('[appStore] Sending expense to dataService', expenseData)
             const newExpense = await dataService.addExpense(expenseData)
 
-            // Log Activity
             await dataService.logActivity({
                 type: 'expense_added',
-                description: `${authStore.user.displayName} added "${expense.description}" in ${group.name}`,
-                involvedUserIds: group.memberIds,
+                description: group
+                    ? `${authStore.user.displayName} added "${expense.description}" in ${group.name}`
+                    : `${authStore.user.displayName} added a personal expense: "${expense.description}"`,
+                involvedUserIds,
                 userId: authStore.user.uid,
-                groupId: expense.groupId,
-                amount: expense.amount
+                groupId: expense.groupId || null,
+                groupName: group ? group.name : 'Personal',
+                amount: expense.amount,
+                documentUrl: expense.documentUrl,
+                category: expense.category
             })
 
             toastStore.success(`Expense "${expense.description}" added!`)
