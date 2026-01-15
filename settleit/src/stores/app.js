@@ -239,7 +239,7 @@ export const useAppStore = defineStore('app', () => {
         try {
             const user = await dataService.findUserByEmail(email)
             if (!user) {
-                toastStore.error('User not found')
+                toastStore.error('User not found. They must sign up first with this email.')
                 return
             }
 
@@ -256,6 +256,7 @@ export const useAppStore = defineStore('app', () => {
             await dataService.addFriend(authStore.user.uid, user)
             toastStore.success(`${user.displayName} added as friend!`)
         } catch (err) {
+            console.error('[addFriend] Error:', err)
             toastStore.error('Failed to add friend')
         }
     }

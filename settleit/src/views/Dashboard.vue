@@ -2,12 +2,11 @@
 import { onMounted, ref, computed } from 'vue'
 import { useAppStore } from '../stores/app'
 import { useRouter } from 'vue-router'
+import ScannerModal from '../components/ScannerModal.vue'
 import { 
   Plus, 
   Users, 
   Search, 
-  Bell, 
-  Menu, 
   ChevronRight, 
   Coffee, 
   Utensils, 
@@ -16,7 +15,11 @@ import {
   Camera,
   Maximize2,
   Activity,
-  History
+  History,
+  X,
+  Mail,
+  UserPlus,
+  Loader2
 } from 'lucide-vue-next'
 
 const store = useAppStore()
@@ -29,6 +32,7 @@ onMounted(async () => {
 const showAddFriendModal = ref(false)
 const friendEmail = ref('')
 const isAddingFriend = ref(false)
+const showScannerModal = ref(false)
 
 const handleAddFriend = async () => {
   if (!friendEmail.value) return
@@ -37,6 +41,21 @@ const handleAddFriend = async () => {
   isAddingFriend.value = false
   showAddFriendModal.value = false
   friendEmail.value = ''
+}
+
+const handleScanSuccess = (scannedData) => {
+  showScannerModal.value = false
+  // Navigate to add expense page with pre-filled data
+  router.push({
+    path: '/add-expense',
+    query: {
+      description: scannedData.description || '',
+      amount: scannedData.amount || '',
+      category: scannedData.category || 'Other',
+      notes: scannedData.notes || '',
+      source: scannedData.source || 'qr'
+    }
+  })
 }
 
 const formatCurrency = (amount, currency = 'INR') => {
@@ -82,10 +101,6 @@ const formatDate = (timestamp) => {
     <!-- Header -->
     <header class="header">
       <div class="logo">SettleIt</div>
-      <div class="header-actions">
-        <button class="icon-btn"><Bell :size="20" /></button>
-        <button class="icon-btn"><Menu :size="20" /></button>
-      </div>
     </header>
 
     <!-- Summary Card -->
@@ -105,7 +120,7 @@ const formatDate = (timestamp) => {
           <Plus :size="18" />
           <span>Add Manually</span>
         </button>
-        <button class="btn-scan">
+        <button class="btn-scan" @click="showScannerModal = true">
           <Maximize2 :size="18" />
           <span>Quick Scan</span>
         </button>
@@ -141,7 +156,7 @@ const formatDate = (timestamp) => {
 
       <div class="history-list">
         <div 
-          v-for="activity in sortedActivities" 
+          v-for="activity in sortedActivities.slice(0, 5)" 
           :key="activity.id" 
           class="history-card glass-card"
           @click="activity.groupId ? router.push(`/group/${activity.groupId}`) : null"
@@ -169,36 +184,66 @@ const formatDate = (timestamp) => {
       </div>
     </section>
 
+    <!-- Scanner Modal -->
+    <ScannerModal 
+      v-if="showScannerModal" 
+      mode="qr"
+      @close="showScannerModal = false"
+      @scan-success="handleScanSuccess"
+    />
+
     <!-- Add Friend Modal -->
-    <transition name="fade">
-      <div v-if="showAddFriendModal" class="modal-overlay" @click.self="showAddFriendModal = false">
-        <div class="modal-content glass-card slide-up-modal">
-          <div class="modal-header">
+    <transition name="modal-fade">
+      <div v-if="showAddFriendModal" class="modern-modal-overlay" @click.self="showAddFriendModal = false">
+        <div class="modern-modal-content">
+          <!-- Modal Header -->
+          <div class="modern-modal-header">
+            <div class="modal-icon-wrapper">
+              <Users :size="24" class="modal-icon" />
+            </div>
             <h3>Add New Friend</h3>
-            <button class="close-btn" @click="showAddFriendModal = false">×</button>
+            <p class="modal-subtitle">Connect with friends to split expenses together</p>
+            <button class="modern-close-btn" @click="showAddFriendModal = false">
+              <X :size="20" />
+            </button>
           </div>
           
-          <div class="modal-body">
-            <p>Enter your friend's email address to add them to your circle.</p>
-            <div class="form-group">
-              <label>Email Address</label>
+          <!-- Modal Body -->
+          <div class="modern-modal-body">
+            <div class="input-group">
+              <label for="friend-email">
+                <Mail :size="16" />
+                <span>Friend's Email Address</span>
+              </label>
               <input 
+                id="friend-email"
                 v-model="friendEmail" 
                 type="email" 
                 placeholder="friend@example.com"
                 @keyup.enter="handleAddFriend"
+                :disabled="isAddingFriend"
               >
+              <span class="input-hint">They must have a SettleIt account with this email</span>
             </div>
           </div>
           
-          <div class="modal-footer">
-            <button class="btn btn-secondary" @click="showAddFriendModal = false">Cancel</button>
+          <!-- Modal Footer -->
+          <div class="modern-modal-footer">
             <button 
-              class="btn btn-primary" 
+              class="modern-btn modern-btn-secondary" 
+              @click="showAddFriendModal = false"
+              :disabled="isAddingFriend"
+            >
+              Cancel
+            </button>
+            <button 
+              class="modern-btn modern-btn-primary" 
               :disabled="!friendEmail || isAddingFriend"
               @click="handleAddFriend"
             >
-              {{ isAddingFriend ? 'Adding...' : 'Add Friend' }}
+              <Loader2 v-if="isAddingFriend" :size="18" class="spin" />
+              <UserPlus v-else :size="18" />
+              <span>{{ isAddingFriend ? 'Adding...' : 'Add Friend' }}</span>
             </button>
           </div>
         </div>
@@ -246,6 +291,19 @@ const formatDate = (timestamp) => {
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+  z-index: 10;
+}
+
+.icon-btn:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  transform: scale(1.05);
+}
+
+.icon-btn:active {
+  transform: scale(0.95);
 }
 
 .summary-section {
@@ -307,6 +365,9 @@ const formatDate = (timestamp) => {
   gap: 0.5rem;
   cursor: pointer;
   transition: transform 0.2s ease;
+  position: relative;
+  z-index: 1;
+  pointer-events: auto;
 }
 
 .btn-manual {
@@ -321,6 +382,10 @@ const formatDate = (timestamp) => {
 
 .btn-manual:active, .btn-scan:active {
   transform: scale(0.98);
+}
+
+.btn-manual:hover, .btn-scan:hover {
+  opacity: 0.9;
 }
 
 .section-header {
@@ -580,6 +645,249 @@ const formatDate = (timestamp) => {
   .dashboard-ref {
     max-width: 1000px;
     padding: 2rem;
+  }
+}
+
+/* Modern Add Friend Modal Styles */
+.modern-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(15, 23, 42, 0.7);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+
+.modern-modal-content {
+  background: white;
+  border-radius: 20px;
+  width: 100%;
+  max-width: 480px;
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+  animation: modalSlideUp 0.3s ease-out;
+}
+
+.modern-modal-header {
+  background: linear-gradient(135deg, #5025d1 0%, #7c3aed 100%);
+  padding: 2rem;
+  text-align: center;
+  position: relative;
+  color: white;
+}
+
+.modal-icon-wrapper {
+  width: 64px;
+  height: 64px;
+  background: rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1rem;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+.modal-icon {
+  color: white;
+}
+
+.modern-modal-header h3 {
+  font-size: 1.5rem;
+  font-weight: 800;
+  margin: 0 0 0.5rem 0;
+  color: white;
+}
+
+.modal-subtitle {
+  font-size: 0.9375rem;
+  opacity: 0.9;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.modern-close-btn {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: white;
+  transition: all 0.2s;
+}
+
+.modern-close-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: rotate(90deg);
+}
+
+.modern-modal-body {
+  padding: 2rem;
+}
+
+.input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.input-group label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #475569;
+}
+
+.input-group input {
+  width: 100%;
+  padding: 0.875rem 1rem;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  font-size: 0.9375rem;
+  color: #0f172a;
+  background: #f8fafc;
+  transition: all 0.2s;
+  outline: none;
+}
+
+.input-group input:focus {
+  border-color: #5025d1;
+  background: white;
+  box-shadow: 0 0 0 4px rgba(80, 37, 209, 0.1);
+}
+
+.input-group input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.input-hint {
+  font-size: 0.8125rem;
+  color: #64748b;
+  margin-top: -0.25rem;
+}
+
+.modern-modal-footer {
+  padding: 1.5rem 2rem;
+  background: #f8fafc;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+.modern-btn {
+  padding: 0.75rem 1.5rem;
+  border-radius: 10px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: none;
+  outline: none;
+}
+
+.modern-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.modern-btn-secondary {
+  background: white;
+  color: #64748b;
+  border: 2px solid #e2e8f0;
+}
+
+.modern-btn-secondary:hover:not(:disabled) {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.modern-btn-primary {
+  background: linear-gradient(135deg, #5025d1 0%, #7c3aed 100%);
+  color: white;
+  box-shadow: 0 4px 12px rgba(80, 37, 209, 0.3);
+}
+
+.modern-btn-primary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(80, 37, 209, 0.4);
+}
+
+.modern-btn-primary:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes modalSlideUp {
+  from {
+    transform: translateY(30px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.modal-fade-enter-active,
+.modal-fade-leave-active {
+  transition: opacity 0.3s;
+}
+
+.modal-fade-enter-from,
+.modal-fade-leave-to {
+  opacity: 0;
+}
+
+.modal-fade-enter-active .modern-modal-content {
+  animation: modalSlideUp 0.3s ease-out;
+}
+
+@media (max-width: 640px) {
+  .modern-modal-header {
+    padding: 1.5rem;
+  }
+
+  .modern-modal-body {
+    padding: 1.5rem;
+  }
+
+  .modern-modal-footer {
+    padding: 1rem 1.5rem;
+    flex-direction: column;
+  }
+
+  .modern-btn {
+    width: 100%;
+    justify-content: center;
   }
 }
 </style>

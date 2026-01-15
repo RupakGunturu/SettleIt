@@ -1,44 +1,46 @@
 <script setup>
 import { ref } from 'vue';
+import { useRouter } from 'vue-router';
 import { 
   ArrowRight, 
   Menu, 
   X, 
-  PieChart, 
-  FileText, 
-  Globe, 
-  Users,
-  Code2,
-  Github
+  Receipt, 
+  QrCode, 
+  Shield, 
+  RefreshCw,
+  Github,
+  LogIn,
+  UserPlus
 } from 'lucide-vue-next';
 
-const email = ref('');
+const router = useRouter();
 const isMenuOpen = ref(false);
 
 const features = [
   {
-    title: 'Group Settlement Algorithm',
-    desc: 'Optimizes graph connectivity to minimize the total number of transactions required to settle debts.',
-    icon: Users,
-    visual: 'graph' 
+    title: 'Smart Expense Tracker',
+    desc: 'Track and split expenses effortlessly with your friends and groups. Never lose track of who owes what.',
+    icon: Receipt,
+    visual: 'list' 
   },
   {
-    title: 'Expense Visualization',
-    desc: 'Interactive charts rendering spending data by category, user, and time period.',
-    icon: PieChart,
-    visual: 'chart'
+    title: 'QR Code Scanner',
+    desc: 'Instantly scan receipts and UPI codes to add expenses automatically. Save time and reduce errors.',
+    icon: QrCode,
+    visual: 'qr'
   },
   {
-    title: 'Real-time Synchronization',
-    desc: 'Instant data updates across clients using WebSocket connections for seamless collaboration.',
-    icon: Globe,
-    visual: 'map'
+    title: 'Secure Vault',
+    desc: 'Your financial data is encrypted and securely stored in the cloud. Privacy and security guaranteed.',
+    icon: Shield,
+    visual: 'shield'
   },
   {
-    title: 'Transparent Logs',
-    desc: 'Immutable record keeping of all transactions and edits for complete group accountability.',
-    icon: FileText,
-    visual: 'list'
+    title: 'Real-time Sync',
+    desc: 'Stay updated across all your devices with instant synchronization. Access your data anywhere, anytime.',
+    icon: RefreshCw,
+    visual: 'sync'
   }
 ];
 </script>
@@ -47,8 +49,8 @@ const features = [
   <div class="min-h-screen bg-slate-50 font-sans text-slate-900 selection:bg-indigo-500 selection:text-white pb-20">
     
     <nav class="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-md border-b border-slate-200/60">
-      <div class="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-        <div class="flex items-center gap-2.5 cursor-pointer">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 h-20 flex items-center justify-between">
+        <div class="flex items-center gap-2.5 cursor-pointer" @click="router.push('/')">
           <div class="w-9 h-9 bg-indigo-600 rounded-lg flex items-center justify-center text-white shadow-lg shadow-indigo-500/30">
             <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
               <path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -58,16 +60,18 @@ const features = [
         </div>
 
         <div class="hidden md:flex items-center gap-10">
-          <a href="#features" class="text-sm font-medium text-slate-600 hover:text-indigo-600 transition-colors">Project Overview</a>
-          <a href="#tech-stack" class="text-sm font-medium text-slate-600 hover:text-indigo-600 transition-colors">Documentation</a>
+          <a href="#features" class="text-sm font-medium text-slate-600 hover:text-indigo-600 transition-colors">Features</a>
+          <a href="#how-it-works" class="text-sm font-medium text-slate-600 hover:text-indigo-600 transition-colors">How It Works</a>
         </div>
 
-        <div class="hidden md:flex items-center gap-4">
-          <a href="#" class="text-slate-600 hover:text-slate-900 transition-colors">
-            <Github :size="20" />
-          </a>
-          <button class="bg-indigo-600 text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-indigo-700 hover:shadow-lg hover:shadow-indigo-500/20 transition-all active:scale-95">
-            Launch App
+        <div class="hidden md:flex items-center gap-3">
+          <button @click="router.push('/login')" class="text-slate-700 hover:text-indigo-600 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-slate-100 transition-all flex items-center gap-2">
+            <LogIn :size="18" />
+            <span>Login</span>
+          </button>
+          <button @click="router.push('/login?mode=signup')" class="bg-indigo-600 text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-indigo-700 hover:shadow-lg hover:shadow-indigo-500/20 transition-all active:scale-95 flex items-center gap-2">
+            <UserPlus :size="18" />
+            <span>Sign Up</span>
           </button>
         </div>
 
@@ -78,42 +82,49 @@ const features = [
       </div>
       
       <div v-if="isMenuOpen" class="md:hidden absolute top-20 left-0 w-full bg-white border-b border-slate-100 p-6 flex flex-col gap-4 shadow-xl">
-        <a href="#" class="text-slate-600 font-medium py-2">Project Overview</a>
-        <a href="#" class="text-slate-600 font-medium py-2">Documentation</a>
+        <a href="#features" @click="isMenuOpen = false" class="text-slate-600 font-medium py-2">Features</a>
+        <a href="#how-it-works" @click="isMenuOpen = false" class="text-slate-600 font-medium py-2">How It Works</a>
         <hr class="border-slate-100">
-        <button class="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold">Launch App</button>
+        <button @click="router.push('/login')" class="w-full border-2 border-indigo-600 text-indigo-600 py-3 rounded-lg font-semibold hover:bg-indigo-50 transition-all flex items-center justify-center gap-2">
+          <LogIn :size="20" />
+          <span>Login</span>
+        </button>
+        <button @click="router.push('/login?mode=signup')" class="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-all flex items-center justify-center gap-2">
+          <UserPlus :size="20" />
+          <span>Sign Up</span>
+        </button>
       </div>
     </nav>
 
-    <header class="relative pt-32 pb-20 lg:pt-48 lg:pb-32 px-6 overflow-hidden">
+    <header class="relative pt-32 pb-20 lg:pt-48 lg:pb-32 px-4 sm:px-6 overflow-hidden">
       <div class="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent"></div>
       <div class="absolute top-20 right-0 -translate-y-12 translate-x-12 w-[600px] h-[600px] bg-indigo-500/5 rounded-full blur-[100px] -z-10"></div>
       <div class="absolute top-40 left-0 -translate-x-20 w-[400px] h-[400px] bg-blue-500/5 rounded-full blur-[80px] -z-10"></div>
 
       <div class="max-w-7xl mx-auto grid lg:grid-cols-2 gap-16 items-center">
         <div class="max-w-2xl">
-          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-slate-600 text-xs font-bold uppercase tracking-wide mb-8">
-            <Code2 class="w-3 h-3" />
-            Built with Vue.js & Tailwind
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-bold uppercase tracking-wide mb-8">
+            <Shield class="w-3 h-3" />
+            Secure & Easy to Use
           </div>
           
-          <h1 class="text-5xl lg:text-7xl font-bold text-slate-900 tracking-tight leading-[1.1] mb-6">
-            Smart expense tracking for <br>
-            <span class="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-violet-600">roommates & teams.</span>
+          <h1 class="text-4xl sm:text-5xl lg:text-7xl font-bold text-slate-900 tracking-tight leading-[1.1] mb-6">
+            Smart expense tracking <br class="hidden sm:block">
+            <span class="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-violet-600">for your group</span>
           </h1>
           
-          <p class="text-lg text-slate-500 mb-10 leading-relaxed max-w-lg">
-            An open-source web application designed to simplify shared living costs. Manage dorm expenses, split grocery bills, and visualize spending habits without the spreadsheet headache.
+          <p class="text-base sm:text-lg text-slate-500 mb-10 leading-relaxed max-w-lg">
+            Split bills, track expenses, and settle up with friends effortlessly. Scan receipts with QR codes, sync across devices, and keep your data secure in the cloud.
           </p>
 
           <div class="flex flex-col sm:flex-row gap-4">
-            <button class="bg-slate-900 text-white px-8 py-4 rounded-xl font-semibold hover:bg-slate-800 transition-all shadow-xl shadow-slate-200 flex items-center justify-center gap-2 group">
-              View Demo
+            <button @click="router.push('/login?mode=signup')" class="bg-indigo-600 text-white px-8 py-4 rounded-xl font-semibold hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-200 flex items-center justify-center gap-2 group">
+              Get Started Free
               <ArrowRight class="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </button>
-            <button class="px-8 py-4 rounded-xl font-semibold text-slate-600 hover:bg-slate-100 transition-all border border-slate-200 flex items-center justify-center gap-2">
-              <Github class="w-4 h-4" />
-              View Source
+            <button @click="router.push('/login')" class="px-8 py-4 rounded-xl font-semibold text-slate-700 hover:bg-slate-100 transition-all border-2 border-slate-200 flex items-center justify-center gap-2">
+              <LogIn class="w-4 h-4" />
+              Sign In
             </button>
           </div>
         </div>
@@ -180,13 +191,13 @@ const features = [
       </div>
     </header>
 
-    <section id="features" class="py-24 px-6 border-t border-slate-200">
+    <section id="features" class="py-24 px-4 sm:px-6 border-t border-slate-200">
       <div class="max-w-7xl mx-auto">
-        <div class="max-w-3xl mb-16">
-          <h2 class="text-indigo-600 font-bold mb-4 uppercase tracking-wider text-sm">System Features</h2>
-          <h3 class="text-3xl font-bold text-slate-900 mb-4">Technical implementation details.</h3>
-          <p class="text-lg text-slate-500">
-            This project focuses on solving the "NP-hard" problem of debt simplification within small sub-groups efficiently.
+        <div class="max-w-3xl mb-16 text-center mx-auto">
+          <h2 class="text-indigo-600 font-bold mb-4 uppercase tracking-wider text-sm">Key Features</h2>
+          <h3 class="text-3xl sm:text-4xl font-bold text-slate-900 mb-4">Everything you need to split expenses</h3>
+          <p class="text-base sm:text-lg text-slate-500">
+            Powerful features designed to make expense tracking and splitting effortless for you and your group.
           </p>
         </div>
 
@@ -205,30 +216,35 @@ const features = [
             </div>
 
             <div class="mt-8 pt-8 border-t border-slate-50">
-              <div v-if="feature.visual === 'graph'" class="flex justify-center gap-1 items-end h-12 opacity-50 group-hover:opacity-100 transition-opacity">
-                 <div class="w-2 h-4 bg-indigo-200 rounded-t"></div>
-                 <div class="w-2 h-8 bg-indigo-300 rounded-t"></div>
-                 <div class="w-2 h-6 bg-indigo-400 rounded-t"></div>
-                 <div class="w-2 h-10 bg-indigo-500 rounded-t"></div>
-                 <div class="w-2 h-5 bg-indigo-200 rounded-t"></div>
+              <div v-if="feature.visual === 'list'" class="space-y-2 opacity-60 group-hover:opacity-100 transition-opacity">
+                 <div class="h-2 w-full bg-indigo-100 rounded"></div>
+                 <div class="h-2 w-3/4 bg-indigo-100 rounded"></div>
+                 <div class="h-2 w-5/6 bg-indigo-100 rounded"></div>
               </div>
               
-              <div v-if="feature.visual === 'map'" class="relative h-12 w-full bg-slate-50 rounded-lg overflow-hidden border border-slate-100">
-                <div class="absolute inset-0 grid grid-cols-4 grid-rows-2 gap-1 opacity-20">
+              <div v-if="feature.visual === 'qr'" class="flex items-center justify-center">
+                <div class="w-12 h-12 border-2 border-indigo-300 rounded-lg grid grid-cols-3 grid-rows-3 gap-0.5 p-1 opacity-70 group-hover:opacity-100 transition-opacity">
                   <div class="bg-indigo-400 rounded-sm"></div>
-                  <div class="bg-indigo-200 rounded-sm col-span-2"></div>
+                  <div class="bg-transparent"></div>
+                  <div class="bg-indigo-400 rounded-sm"></div>
+                  <div class="bg-transparent"></div>
+                  <div class="bg-indigo-500 rounded-sm"></div>
+                  <div class="bg-transparent"></div>
+                  <div class="bg-indigo-400 rounded-sm"></div>
+                  <div class="bg-transparent"></div>
+                  <div class="bg-indigo-400 rounded-sm"></div>
                 </div>
-                <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 bg-indigo-600 rounded-full shadow-[0_0_0_4px_rgba(79,70,229,0.2)]"></div>
               </div>
 
-               <div v-if="feature.visual === 'list'" class="space-y-2 opacity-60 group-hover:opacity-100 transition-opacity">
-                 <div class="h-2 w-full bg-slate-100 rounded"></div>
-                 <div class="h-2 w-3/4 bg-slate-100 rounded"></div>
-                 <div class="h-2 w-5/6 bg-slate-100 rounded"></div>
+              <div v-if="feature.visual === 'shield'" class="flex items-center justify-center">
+                <div class="relative w-12 h-14 opacity-70 group-hover:opacity-100 transition-opacity">
+                  <div class="absolute inset-0 bg-gradient-to-br from-indigo-400 to-indigo-600 rounded-t-lg" style="clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)"></div>
+                  <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 border-2 border-white rounded-full"></div>
+                </div>
               </div>
 
-              <div v-if="feature.visual === 'chart'" class="flex items-center justify-center">
-                 <div class="w-10 h-10 rounded-full border-4 border-indigo-100 border-t-indigo-500 rotate-45"></div>
+              <div v-if="feature.visual === 'sync'" class="flex items-center justify-center">
+                 <div class="w-10 h-10 rounded-full border-4 border-indigo-100 border-t-indigo-500 opacity-70 group-hover:opacity-100 group-hover:rotate-180 transition-all duration-500"></div>
               </div>
             </div>
           </div>
@@ -236,13 +252,13 @@ const features = [
       </div>
     </section>
 
-    <section class="bg-slate-900 py-24 px-6 text-white overflow-hidden relative rounded-t-[3rem]">
+    <section id="how-it-works" class="bg-slate-900 py-24 px-4 sm:px-6 text-white overflow-hidden relative rounded-t-[3rem]">
       <div class="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-600/20 rounded-full blur-[128px]"></div>
       
       <div class="max-w-7xl mx-auto relative z-10">
         <div class="text-center mb-16">
-          <h2 class="text-3xl md:text-4xl font-bold mb-6">Workflow</h2>
-          <p class="text-slate-400 max-w-xl mx-auto">How the application processes user data.</p>
+          <h2 class="text-3xl md:text-4xl font-bold mb-6">How It Works</h2>
+          <p class="text-slate-400 max-w-xl mx-auto">Get started in three simple steps</p>
         </div>
 
         <div class="grid md:grid-cols-3 gap-12 relative">
@@ -252,24 +268,24 @@ const features = [
             <div class="w-24 h-24 bg-slate-800 border border-slate-700 rounded-2xl flex items-center justify-center text-2xl font-bold mb-8 shadow-2xl shadow-black/50">
               1
             </div>
-            <h3 class="text-xl font-bold mb-3">Input</h3>
-            <p class="text-slate-400 text-sm leading-relaxed">Users add transactions. Data is validated and stored in the NoSQL database.</p>
+            <h3 class="text-xl font-bold mb-3">Sign Up</h3>
+            <p class="text-slate-400 text-sm leading-relaxed">Create your free account and invite your friends or group members to join.</p>
           </div>
 
           <div class="relative z-10 flex flex-col items-center text-center">
             <div class="w-24 h-24 bg-indigo-600 rounded-2xl flex items-center justify-center text-2xl font-bold mb-8 shadow-2xl shadow-indigo-900/50 ring-4 ring-indigo-900">
               2
             </div>
-            <h3 class="text-xl font-bold mb-3">Process</h3>
-            <p class="text-slate-400 text-sm leading-relaxed">The simplification algorithm runs to determine the most efficient debt path.</p>
+            <h3 class="text-xl font-bold mb-3">Add Expenses</h3>
+            <p class="text-slate-400 text-sm leading-relaxed">Scan receipts, add expenses manually, or use QR codes to track spending instantly.</p>
           </div>
 
           <div class="relative z-10 flex flex-col items-center text-center">
             <div class="w-24 h-24 bg-slate-800 border border-slate-700 rounded-2xl flex items-center justify-center text-2xl font-bold mb-8 shadow-2xl shadow-black/50">
               3
             </div>
-            <h3 class="text-xl font-bold mb-3">Output</h3>
-            <p class="text-slate-400 text-sm leading-relaxed">Settlement reports are generated and synced to all connected client dashboards.</p>
+            <h3 class="text-xl font-bold mb-3">Settle Up</h3>
+            <p class="text-slate-400 text-sm leading-relaxed">View who owes what and settle debts easily. Everyone stays in sync across all devices.</p>
           </div>
         </div>
       </div>

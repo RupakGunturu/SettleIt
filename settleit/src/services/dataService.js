@@ -44,9 +44,9 @@ export const dataService = {
         if (!db) return () => { }
         const q = query(
             collection(db, 'activity'),
-            where('involvedUserIds', 'array-contains', userId),
-            orderBy('timestamp', 'desc'),
-            limit(100)
+            where('involvedUserIds', 'array-contains', userId)
+            // orderBy('timestamp', 'desc'), // Requires Index
+            // limit(100)
         )
         return onSnapshot(q, (snapshot) => {
             const activities = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
@@ -102,8 +102,8 @@ export const dataService = {
         if (!db) return () => { }
         const q = query(
             collection(db, 'expenses'),
-            where('involvedUserIds', 'array-contains', userId),
-            orderBy('date', 'desc')
+            where('involvedUserIds', 'array-contains', userId)
+            // orderBy('date', 'desc') // Requires Index
         )
         return onSnapshot(q, (snapshot) => {
             const expenses = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))

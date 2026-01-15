@@ -17,6 +17,12 @@ import {
 const store = useAppStore()
 const router = useRouter()
 
+onMounted(() => {
+  console.log('[ActivityView] Mounted')
+  console.log('[ActivityView] Store activities count:', store.activities.length)
+  console.log('[ActivityView] Store activities:', store.activities)
+})
+
 const sortedActivities = computed(() => {
   return [...store.activities].sort((a, b) => {
     const dateA = a.timestamp?.toDate ? a.timestamp.toDate() : new Date(a.date || 0)

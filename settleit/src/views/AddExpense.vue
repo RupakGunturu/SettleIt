@@ -17,8 +17,11 @@ import {
   Bell,
   Upload,
   FileText,
-  AlertCircle
+  AlertCircle,
+  QrCode,
+  Scan
 } from 'lucide-vue-next'
+import ScannerModal from '../components/ScannerModal.vue'
 
 const store = useAppStore()
 const authStore = useAuthStore()
@@ -28,17 +31,20 @@ const route = useRoute()
 // --- State ---
 const billName = ref('')
 const selectedCategory = ref('Food')
+const expenseDate = ref(new Date().toISOString().split('T')[0])
 const showCategoryDropdown = ref(false)
 const items = ref([
   { id: Date.now(), name: '', quantity: 1, amount: null }
 ])
 
 // New Features State
-const isPersonal = ref(false)
-const reminderDate = ref('')
-const hasReminder = ref(false)
+const isPersonal = ref(true) // Default to Personal
 const documentUrl = ref('')
 const isUploading = ref(false)
+
+// Scanner state
+const showScanner = ref(false)
+const scannerMode = ref('qr') // 'qr' or 'ocr'
 
 // Categories
 const categories = [
@@ -70,6 +76,28 @@ onMounted(async () => {
     groupId.value = initialGroupId
     // Default split with everyone
     splitMembers.value = [...(store.getGroupById(initialGroupId)?.memberIds || [])]
+  }
+  
+  // Handle pre-filled data from Quick Scan (route query parameters)
+  if (route.query.description) {
+    billName.value = route.query.description
+  }
+  if (route.query.amount) {
+    const amount = parseFloat(route.query.amount)
+    if (amount > 0) {
+      items.value = [{ 
+        id: Date.now(), 
+        name: route.query.description || 'Scanned item', 
+        quantity: 1, 
+        amount: amount 
+      }]
+    }
+  }
+  if (route.query.category) {
+    selectedCategory.value = route.query.category
+  }
+  if (route.query.notes) {
+    // Could add a notes field if needed in the future
   }
 })
 
@@ -134,18 +162,24 @@ const currentCategoryIcon = computed(() => {
 })
 
 const handleSave = async () => {
-  if (!billName.value || subtotal.value <= 0) return
+  console.log('[AddExpense] handleSave called')
+  console.log('[AddExpense] State:', { billName: billName.value, subtotal: subtotal.value, isPersonal: isPersonal.value })
+  
+  if (!billName.value || subtotal.value <= 0) {
+    console.warn('[AddExpense] Validation failed')
+    return
+  }
 
   const expenseData = {
     description: billName.value,
     amount: subtotal.value,
     groupId: isPersonal.value ? null : groupId.value,
-    date: new Date().toISOString(),
+    date: new Date(expenseDate.value).toISOString(),
     category: selectedCategory.value,
     items: items.value.map(i => ({ ...i })),
     splitWith: isPersonal.value ? [authStore.user?.uid] : splitMembers.value,
     paidBy: authStore.user?.uid,
-    reminderDate: hasReminder.value ? reminderDate.value : null,
+    paidBy: authStore.user?.uid,
     documentUrl: documentUrl.value,
     isPersonal: isPersonal.value
   }
@@ -158,6 +192,43 @@ const handleSave = async () => {
   } else {
     router.push(`/group/${groupId.value}`)
   }
+}
+
+const openScanner = (mode) => {
+  scannerMode.value = mode
+  showScanner.value = true
+}
+
+const handleScanSuccess = (data) => {
+  if (data.description && !billName.value) billName.value = data.description
+  if (data.date) expenseDate.value = data.date
+  
+  if (data.items && data.items.length > 0) {
+    items.value = data.items
+    
+    // Check if extracted items sum matches the scanned Total
+    // If not, add a "Tax / Other Charges" item for the difference
+    if (data.amount > 0) {
+      const itemsTotal = items.value.reduce((sum, item) => sum + (item.amount * item.quantity), 0)
+      const diff = data.amount - itemsTotal
+      
+      // If difference is significant (positive), add it as extra charge
+      // If negative, it means we scanned items correctly (maybe Total was subtotal?), so we trust items
+      if (diff > 1.0) { 
+        items.value.push({
+          id: Date.now() + 999,
+          name: 'Tax / Other Charges',
+          quantity: 1,
+          amount: parseFloat(diff.toFixed(2))
+        })
+      }
+    }
+  } else if (data.amount) {
+    items.value = [{ id: Date.now(), name: billName.value, quantity: 1, amount: data.amount }]
+  }
+  
+  if (data.category) selectedCategory.value = data.category
+  showScanner.value = false
 }
 </script>
 
@@ -180,16 +251,17 @@ const handleSave = async () => {
         <section class="card type-card">
           <div class="flex items-center justify-between">
             <div class="type-info">
-              <h3 class="text-lg font-bold">Personal Expense</h3>
-              <p class="text-sm text-gray-500">Enable this if you don't want to split with anyone</p>
+              <h3 class="text-lg font-bold">Split Expense</h3>
+              <p class="text-sm text-gray-500">Enable to split this bill with your group</p>
             </div>
             <label class="switch">
-              <input type="checkbox" v-model="isPersonal">
+              <input type="checkbox" :checked="!isPersonal" @change="isPersonal = !isPersonal">
               <span class="slider round"></span>
             </label>
           </div>
         </section>
 
+        <!-- Expense Details (Visible for both) -->
         <section class="card detail-card">
           <div class="input-group">
             <label class="label">Bill Description</label>
@@ -202,6 +274,18 @@ const handleSave = async () => {
                 class="text-input"
                 autoFocus
               />
+            </div>
+            
+            <!-- Scanner Buttons -->
+            <div class="scanner-buttons">
+              <button type="button" class="scanner-btn qr-btn" @click="openScanner('qr')">
+                <QrCode :size="18" />
+                <span>Scan QR</span>
+              </button>
+              <button type="button" class="scanner-btn ocr-btn" @click="openScanner('ocr')">
+                <Scan :size="18" />
+                <span>Scan Receipt</span>
+              </button>
             </div>
           </div>
 
@@ -228,9 +312,13 @@ const handleSave = async () => {
 
             <div class="input-group">
               <label class="label">Date</label>
-              <div class="readonly-input">
-                <Calendar :size="16" />
-                <span>Today</span>
+              <div class="input-wrapper">
+                <Calendar :size="16" class="input-icon" />
+                <input 
+                  v-model="expenseDate" 
+                  type="date" 
+                  class="text-input"
+                />
               </div>
             </div>
           </div>
@@ -320,33 +408,16 @@ const handleSave = async () => {
           </button>
         </section>
 
-        <!-- Reminders & Documents -->
+        <!-- Documents -->
         <section class="card extra-card">
           <div class="section-header">
             <div class="flex items-center gap-2">
-              <Bell :size="18" class="text-indigo-600" />
-              <h3>Reminder & Proof</h3>
+              <Upload :size="18" class="text-indigo-600" />
+              <h3>Attachments</h3>
             </div>
           </div>
 
           <div class="extra-options">
-            <div class="input-group">
-              <div class="flex items-center justify-between mb-2">
-                <label class="label">Set Reminder</label>
-                <label class="switch-sm">
-                  <input type="checkbox" v-model="hasReminder">
-                  <span class="slider round"></span>
-                </label>
-              </div>
-              <input 
-                v-if="hasReminder"
-                v-model="reminderDate" 
-                type="date" 
-                class="native-select"
-              />
-            </div>
-
-            <div class="divider-h"></div>
 
             <div class="input-group">
               <label class="label">Attach Receipt / Document</label>
@@ -432,13 +503,20 @@ const handleSave = async () => {
       </div>
     </div>
 
+    <!-- Scanner Modal -->
+    <ScannerModal 
+      v-if="showScanner"
+      :mode="scannerMode"
+      @close="showScanner = false"
+      @scan-success="handleScanSuccess"
+    />
   </div>
 </template>
 
 <style scoped>
 /* --- Design Tokens --- */
 :root {
-  --primary: #4f46e5;
+  --primary: #5025d1;
   --bg-app: #f8fafc;
   --bg-card: #ffffff;
   --border: #e2e8f0;
@@ -675,6 +753,54 @@ const handleSave = async () => {
   transform: translateY(-50%);
   pointer-events: none;
   color: var(--text-sub);
+}
+
+.input-wrapper .text-input::placeholder {
+  color: var(--text-muted);
+}
+
+/* Scanner Buttons */
+.scanner-buttons {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.scanner-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border-radius: 10px;
+  border: 2px solid;
+  font-weight: 600;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.qr-btn {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+  color: #5025d1;
+}
+
+.qr-btn:hover {
+  background: #e0e7ff;
+  border-color: #a5b4fc;
+}
+
+.ocr-btn {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #059669;
+}
+
+.ocr-btn:hover {
+  background: #d1fae5;
+  border-color: #6ee7b7;
 }
 
 /* --- Split Section --- */

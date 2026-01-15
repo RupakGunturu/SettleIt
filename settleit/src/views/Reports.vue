@@ -39,16 +39,29 @@ const totalExpense = computed(() => {
 const budgetLimit = 30000
 const budgetPercentage = computed(() => Math.min((totalExpense.value / budgetLimit) * 100, 100))
 
-// Mock Chart Data (Mon-Sun)
-const chartData = [
-  { label: 'Mon', income: 40, expense: 20 },
-  { label: 'Tue', income: 30, expense: 45 },
-  { label: 'Wed', income: 55, expense: 30 },
-  { label: 'Thu', income: 45, expense: 25 },
-  { label: 'Fri', income: 60, expense: 50 },
-  { label: 'Sat', income: 20, expense: 80 },
-  { label: 'Sun', income: 10, expense: 35 },
-]
+const categoryBreakdown = computed(() => {
+  const categories = {}
+  store.allExpenses.forEach(expense => {
+    const cat = expense.category || 'Other'
+    categories[cat] = (categories[cat] || 0) + Number(expense.amount)
+  })
+  
+  const total = Object.values(categories).reduce((sum, val) => sum + val, 0) || 1
+  
+  return Object.entries(categories)
+    .map(([name, amount]) => ({
+      name,
+      amount,
+      percentage: Math.round((amount / total) * 100)
+    }))
+    .sort((a, b) => b.amount - a.amount)
+    .slice(0, 4)
+})
+
+const getCategoryColor = (index) => {
+  const colors = ['#8b5cf6', '#ef4444', '#f59e0b', '#3b82f6']
+  return colors[index] || '#64748b'
+}
 
 const recentTransactions = computed(() => {
   return [...store.allExpenses]
@@ -58,6 +71,23 @@ const recentTransactions = computed(() => {
 
 const formatDate = (dateStr) => {
   return new Date(dateStr).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })
+}
+
+const getPieSlicePath = (index) => {
+  let startAngle = 0
+  for (let i = 0; i < index; i++) {
+    startAngle += (categoryBreakdown.value[i].percentage / 100) * 360
+  }
+  const angle = (categoryBreakdown.value[index].percentage / 100) * 360
+  const endAngle = startAngle + angle
+  const startRad = (startAngle - 90) * Math.PI / 180
+  const endRad = (endAngle - 90) * Math.PI / 180
+  const x1 = 100 + 90 * Math.cos(startRad)
+  const y1 = 100 + 90 * Math.sin(startRad)
+  const x2 = 100 + 90 * Math.cos(endRad)
+  const y2 = 100 + 90 *  Math.sin(endRad)
+  const largeArc = angle > 180 ? 1 : 0
+  return `M 100 100 L ${x1} ${y1} A 90 90 0 ${largeArc} 1 ${x2} ${y2} Z`
 }
 
 const formatCurrency = (amount) => {
@@ -169,36 +199,62 @@ const exportCSV = () => {
 
       <section class="chart-section card">
         <div class="card-header">
-          <h3>Cash Flow Analysis</h3>
-          <div class="legend">
-            <div class="legend-item"><span class="dot income"></span> Income</div>
-            <div class="legend-item"><span class="dot expense"></span> Expense</div>
+          <div>
+            <h3>Spending Breakdown</h3>
+            <p class="chart-subtitle">{{ timeRange }} overview by category</p>
           </div>
         </div>
         
-        <div class="bar-chart-container">
-          <div class="chart-grid-lines">
-            <div class="line"></div>
-            <div class="line"></div>
-            <div class="line"></div>
-            <div class="line"></div>
+        <div class="pie-chart-container">
+          <div class="chart-wrapper">
+            <svg viewBox="0 0 200 200" class="pie-chart">
+              <defs>
+                <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
+                  <feDropShadow dx="0" dy="4" stdDeviation="3" flood-opacity="0.15"/>
+                </filter>
+                <linearGradient v-for="(cat, index) in categoryBreakdown" :key="'grad-' + index" :id="'gradient-' + index" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" :stop-color="getCategoryColor(index)" stop-opacity="1"/>
+                  <stop offset="100%" :stop-color="getCategoryColor(index)" stop-opacity="0.7"/>
+                </linearGradient>
+              </defs>
+              
+              <circle cx="100" cy="100" r="95" fill="#f8fafc" />
+              
+              <g class="pie-slices">
+                <path
+                  v-for="(cat, index) in categoryBreakdown" 
+                  :key="cat.name"
+                  :d="getPieSlicePath(index)"
+                  :fill="`url(#gradient-${index})`"
+                  class="pie-slice"
+                  filter="url(#shadow)"
+                  @mouseenter="() => {}"
+                />
+              </g>
+              
+              <circle cx="100" cy="100" r="65" fill="white" filter="url(#shadow)" />
+              
+              <text x="100" y="92" text-anchor="middle" class="pie-center-amount">{{ formatCurrency(totalExpense) }}</text>
+              <text x="100" y="108" text-anchor="middle" class="pie-center-label">Total Spent</text>
+            </svg>
           </div>
-          
-          <div class="bars-wrapper">
-            <div v-for="(day, i) in chartData" :key="i" class="bar-group">
-              <div class="bar-pair">
-                <div 
-                  class="bar-fill income" 
-                  :style="{ height: `${day.income}%` }"
-                  :title="`Income: ${day.income}`"
-                ></div>
-                <div 
-                  class="bar-fill expense" 
-                  :style="{ height: `${day.expense}%` }"
-                  :title="`Expense: ${day.expense}`"
-                ></div>
+
+          <div class="category-legend">
+            <div 
+              v-for="(cat, index) in categoryBreakdown" 
+              :key="cat.name"
+              class="legend-item"
+            >
+              <div class="legend-marker" :style="{ background: `linear-gradient(135deg, ${getCategoryColor(index)}, ${getCategoryColor(index)}dd)` }"></div>
+              <div class="legend-content">
+                <div class="legend-top">
+                  <span class="cat-name">{{ cat.name }}</span>
+                  <span class="cat-percent">{{ cat.percentage }}%</span>
+                </div>
+                <div class="legend-bottom">
+                  <span class="cat-amount">{{ formatCurrency(cat.amount) }}</span>
+                </div>
               </div>
-              <span class="x-label">{{ day.label }}</span>
             </div>
           </div>
         </div>
@@ -457,61 +513,155 @@ const exportCSV = () => {
 .dot.income { background: var(--primary); }
 .dot.expense { background: #cbd5e1; }
 
-.bar-chart-container {
-  position: relative;
-  height: 300px;
-  width: 100%;
-}
-
-.chart-grid-lines {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  z-index: 0;
-}
-.line { width: 100%; height: 1px; background: #f1f5f9; border-bottom: 1px dashed #e2e8f0; }
-
-.bars-wrapper {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  z-index: 1;
-  padding: 0 1rem;
-}
-
-.bar-group {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.5rem;
-  height: 90%; /* Leave space for labels */
-  flex: 1;
-}
-
-.bar-pair {
-  flex: 1;
-  display: flex;
-  align-items: flex-end;
-  gap: 4px;
-  width: 24px;
-}
-
-.bar-fill {
-  width: 100%;
-  border-radius: 4px 4px 0 0;
-  transition: height 0.5s ease-out;
-}
-.bar-fill.income { background: var(--primary); }
-.bar-fill.expense { background: #cbd5e1; }
-
-.x-label {
-  font-size: 0.75rem;
+/* Pie Chart Styles */
+.chart-subtitle {
+  font-size: 0.875rem;
   color: var(--text-sub);
+  margin-top: 0.25rem;
+}
+
+.pie-chart-container {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2.5rem;
+  padding: 1.5rem 0;
+}
+
+@media (min-width: 768px) {
+  .pie-chart-container {
+    grid-template-columns: 300px 1fr;
+    align-items: center;
+  }
+}
+
+.chart-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+}
+
+.pie-chart {
+  width: 100%;
+  max-width: 300px;
+  height: auto;
+  filter: drop-shadow(0 10px 30px rgba(0, 0, 0, 0.08));
+}
+
+.pie-slices {
+  animation: rotateIn 0.8s ease-out;
+}
+
+@keyframes rotateIn {
+  from {
+    transform: rotate(-90deg);
+    opacity: 0;
+  }
+  to {
+    transform: rotate(0deg);
+    opacity: 1;
+  }
+}
+
+.pie-slice {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transform-origin: center;
+  cursor: pointer;
+  stroke: white;
+  stroke-width: 2;
+}
+
+.pie-slice:hover {
+  filter: brightness(1.1) saturate(1.2);
+  transform: scale(1.02);
+}
+
+.pie-center-amount {
+  font-size: 28px;
+  font-weight: 900;
+  fill: var(--text-main);
+  letter-spacing: -0.5px;
+  animation: fadeIn 0.6s ease-out 0.3s both;
+}
+
+.pie-center-label {
+  font-size: 11px;
   font-weight: 600;
+  fill: var(--text-sub);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  animation: fadeIn 0.6s ease-out 0.4s both;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Category Legend */
+.category-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  background: #f8fafc;
+  border-radius: 12px;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+
+.legend-item:hover {
+  background: #f1f5f9;
+  transform: translateX(4px);
+}
+
+.legend-marker {
+  width: 12px;
+  height: 40px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.legend-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.legend-top,
+.legend-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.cat-name {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.cat-percent {
+  font-size: 0.875rem;
+  font-weight: 800;
+  color: var(--primary);
+  background: #eef2ff;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.cat-amount {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-sub);
 }
 
 /* --- Sidebar --- */

@@ -7,16 +7,14 @@ import {
   PlusCircle, 
   Users, 
   BarChart3, 
-  Settings, 
-  LogOut,
+  Activity,
   Bell,
   Search,
-  ChevronRight,
-  Info,
-  Activity
+  Info
 } from 'lucide-vue-next'
 import { useAppStore } from './stores/app'
 import { useToastStore } from './stores/toast'
+import Sidebar from './components/Sidebar.vue'
 
 const authStore = useAuthStore()
 const appStore = useAppStore()
@@ -67,57 +65,15 @@ const handleLogout = async () => {
   router.push('/')
 }
 
-const navLinks = [
-  { name: 'Dashboard', path: '/dashboard', icon: Home },
-  { name: 'Activity', path: '/activity', icon: Activity },
-  { name: 'Groups', path: '/groups', icon: Users },
-  { name: 'Stats', path: '/reports', icon: BarChart3 },
-  // { name: 'About', path: '/about', icon: Info },
-  // { name: 'Settings', path: '/settings', icon: Settings },
-]
 </script>
 
 <template>
   <div class="app-layout" :class="{ 'auth-layout': !authStore.user || ['Login', 'Landing', 'About'].includes(route.name) }">
     <!-- Desktop Sidebar -->
-    <aside v-if="authStore.user && !['Login', 'Landing', 'About'].includes(route.name)" class="sidebar">
-      <div class="sidebar-header">
-        <div class="logo" @click="router.push('/dashboard')">
-          <span class="logo-icon">S</span>
-          <span class="logo-text">SettleIt</span>
-        </div>
-      </div>
-
-      <nav class="sidebar-nav">
-        <router-link 
-          v-for="link in navLinks" 
-          :key="link.path" 
-          :to="link.path" 
-          class="sidebar-link"
-          active-class="active"
-        >
-          <component :is="link.icon" :size="20" />
-          <span>{{ link.name }}</span>
-          <ChevronRight v-if="route.path === link.path" :size="16" class="active-chevron" />
-        </router-link>
-      </nav>
-
-      <div class="sidebar-footer">
-        <div class="user-info">
-          <div class="avatar">
-            {{ authStore.user.displayName ? authStore.user.displayName[0] : 'U' }}
-          </div>
-          <div class="user-details">
-            <span class="name">{{ authStore.user.displayName || 'User' }}</span>
-            <span class="email">{{ authStore.user.email }}</span>
-          </div>
-        </div>
-        <button class="logout-btn" @click="handleLogout">
-          <LogOut :size="18" />
-          <span>Logout</span>
-        </button>
-      </div>
-    </aside>
+    <Sidebar 
+      v-if="authStore.user && !['Login', 'Landing', 'About'].includes(route.name)" 
+      @logout="handleLogout"
+    />
 
     <div class="main-wrapper">
       <!-- Desktop Top Header -->
@@ -167,7 +123,9 @@ const navLinks = [
           </transition>
         </div>
         <div class="header-actions">
-          <button class="icon-btn"><Bell :size="20" /></button>
+          <button class="icon-btn" @click="router.push('/reminders')" title="Reminders">
+            <Bell :size="20" />
+          </button>
           <div class="v-divider"></div>
           <button class="add-expense-btn" @click="router.push('/add-expense')">
             <PlusCircle :size="18" />
@@ -197,13 +155,13 @@ const navLinks = [
       <router-link to="/add-expense" class="mobile-link add-btn">
         <PlusCircle :size="28" />
       </router-link>
+      <router-link to="/reminders" class="mobile-link" active-class="active">
+        <Bell :size="22" />
+        <span>Reminders</span>
+      </router-link>
       <router-link to="/groups" class="mobile-link" active-class="active">
         <Users :size="22" />
         <span>Groups</span>
-      </router-link>
-      <router-link to="/reports" class="mobile-link" active-class="active">
-        <BarChart3 :size="22" />
-        <span>Stats</span>
       </router-link>
     </nav>
 
@@ -241,153 +199,6 @@ const navLinks = [
   display: flex;
   flex-direction: column;
   min-width: 0;
-}
-
-/* Sidebar Styles */
-.sidebar {
-  width: 280px;
-  background: white;
-  border-right: 1px solid #e2e8f0;
-  display: none;
-  flex-direction: column;
-  height: 100vh;
-  position: sticky;
-  top: 0;
-  z-index: 50;
-}
-
-@media (min-width: 1024px) {
-  .sidebar {
-    display: flex;
-  }
-}
-
-.sidebar-header {
-  padding: 2rem;
-}
-
-.logo {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  cursor: pointer;
-}
-
-.logo-icon {
-  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 800;
-  color: white;
-}
-
-.logo-text {
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: #0f172a;
-}
-
-.sidebar-nav {
-  padding: 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  flex: 1;
-}
-
-.sidebar-link {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 0.875rem 1.25rem;
-  border-radius: 12px;
-  color: #64748b;
-  text-decoration: none;
-  font-weight: 600;
-  transition: all 0.2s ease;
-}
-
-.sidebar-link:hover {
-  background: #f8fafc;
-  color: #0f172a;
-}
-
-.sidebar-link.active {
-  background: #f1f5f9;
-  color: #5025d1;
-}
-
-.active-chevron {
-  margin-left: auto;
-  opacity: 0.5;
-}
-
-.sidebar-footer {
-  padding: 1.5rem;
-  border-top: 1px solid #f1f5f9;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.user-info {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  background: #f1f5f9;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  color: #5025d1;
-}
-
-.user-details {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.user-details .name {
-  font-size: 0.875rem;
-  font-weight: 700;
-  color: #0f172a;
-}
-
-.user-details .email {
-  font-size: 0.75rem;
-  color: #94a3b8;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.logout-btn {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.75rem;
-  border: none;
-  background: transparent;
-  color: #ef4444;
-  font-weight: 600;
-  cursor: pointer;
-  border-radius: 8px;
-  transition: background 0.2s;
-}
-
-.logout-btn:hover {
-  background: #fef2f2;
 }
 
 /* Top Header Styles */
