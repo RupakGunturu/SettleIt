@@ -1,7 +1,8 @@
 <script setup>
 import { useAppStore } from '../stores/app'
+import { useToastStore } from '../stores/toast'
 import { useRoute, useRouter } from 'vue-router'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { 
   ArrowLeft, 
   Plus, 
@@ -12,9 +13,10 @@ import {
   Car, 
   Home, 
   ShoppingBag,
-  MoreVertical,
+  ChevronDown,
   Users,
   Trash2,
+  Pencil,
   Tv,
   Stethoscope,
   BookOpen,
@@ -22,39 +24,144 @@ import {
   Coffee,
   FileText
 } from 'lucide-vue-next'
+import AddExpenseModal from '../components/AddExpenseModal.vue'
+import ConfirmModal from '../components/ConfirmModal.vue'
+import EditGroupModal from '../components/EditGroupModal.vue'
 
 const store = useAppStore()
+const toastStore = useToastStore()
 const route = useRoute()
 const router = useRouter()
 
 const showMembers = ref(false)
+const showExpenseModal = ref(false)
+const showGroupMenu = ref(false)
+const showEditModal = ref(false)
+const showDeleteConfirm = ref(false)
+const expenseToDelete = ref(null)
 const newMemberEmail = ref('')
 
 const addMember = async () => {
-  if (!newMemberEmail.value) return
+  if (!newMemberEmail.value) {
+    toastStore.error('Please enter an email address')
+    return
+  }
+  
+  if (!group.value) {
+    toastStore.error('Group not found')
+    return
+  }
+  
+  console.log('[GroupDetail] Adding member:', newMemberEmail.value, 'to group:', group.value.id)
+  
   try {
-    await store.inviteMemberByEmail(route.params.id, newMemberEmail.value)
+    await store.inviteMemberByEmail(group.value.id, newMemberEmail.value)
     newMemberEmail.value = ''
-    alert('Member added successfully!')
   } catch (err) {
-    alert(err.message)
+    console.error('[GroupDetail] Error adding member:', err)
+    // Error toast is shown by the store
   }
 }
 
 const deleteExpense = async (expenseId) => {
-  if (confirm('Are you sure you want to delete this expense?')) {
-    await store.deleteExpense(expenseId)
+  expenseToDelete.value = expenseId
+  showDeleteConfirm.value = true
+}
+
+const confirmDeleteExpense = async () => {
+  if (expenseToDelete.value) {
+    await store.deleteExpense(expenseToDelete.value)
+    showDeleteConfirm.value = false
+    expenseToDelete.value = null
+  }
+}
+
+const handleUpdateGroup = async (data) => {
+  if (!group.value) {
+    toastStore.error('Group not found')
+    return
+  }
+  
+  try {
+    console.log('[GroupDetail] Updating group:', group.value.id, data)
+    await store.updateGroup(group.value.id, {
+      name: data.name,
+      description: data.description,
+      slug: data.name.toLowerCase().replace(/\s+/g, '-')
+    })
+    showEditModal.value = false
+    toastStore.success('Group updated successfully!')
+  } catch (err) {
+    console.error('[GroupDetail] Update group error:', err)
+    toastStore.error('Failed to update group: ' + err.message)
+  }
+}
+
+const handleDeleteGroup = async () => {
+  showEditModal.value = false
+  showDeleteConfirm.value = true
+  expenseToDelete.value = null // Use this to distinguish group delete
+}
+
+const confirmDeleteGroup = async () => {
+  if (!group.value) {
+    toastStore.error('Group not found')
+    return
+  }
+  
+  try {
+    console.log('[GroupDetail] Deleting group:', group.value.id)
+    await store.deleteGroup(group.value.id)
+    showDeleteConfirm.value = false
+    toastStore.success('Group deleted successfully!')
+    router.push('/groups')
+  } catch (err) {
+    console.error('[GroupDetail] Delete group error:', err)
+    toastStore.error('Failed to delete group: ' + err.message)
   }
 }
 
 onMounted(() => {
-  if (route.params.id) {
-    store.subscribeToExpenses(route.params.id)
+  const groupData = store.getGroupById(route.params.id)
+  if (groupData) {
+    console.log('[GroupDetail] Mounted with group:', groupData.name, 'ID:', groupData.id)
+    store.subscribeToExpenses(groupData.id)
+  } else {
+    console.error('[GroupDetail] Group not found for param:', route.params.id)
   }
 })
 
+// Watch for route changes (when navigating between different groups)
+watch(() => route.params.id, (newId, oldId) => {
+  if (newId && newId !== oldId) {
+    const groupData = store.getGroupById(newId)
+    if (groupData) {
+      console.log('[GroupDetail] Route changed, reloading group:', groupData.name, 'ID:', groupData.id)
+      store.subscribeToExpenses(groupData.id)
+    } else {
+      console.error('[GroupDetail] Group not found for param:', newId)
+    }
+  }
+})
+
+
 const group = computed(() => store.getGroupById(route.params.id))
-const expenses = computed(() => store.getExpensesByGroup(route.params.id))
+const expenses = computed(() => {
+  // Use the actual group ID, not the route param (which might be a slug)
+  if (!group.value) return []
+  return store.getExpensesByGroup(group.value.id)
+})
+
+// Calculate total spent from actual expenses
+const totalSpent = computed(() => {
+  return expenses.value.reduce((sum, expense) => sum + (expense.amount || 0), 0)
+})
+
+// Calculate user's share
+const yourShare = computed(() => {
+  if (!group.value || group.value.members.length === 0) return 0
+  return totalSpent.value / group.value.members.length
+})
 
 const formatCurrency = (amount, currency = 'INR') => {
   return new Intl.NumberFormat('en-IN', {
@@ -86,33 +193,48 @@ const getMemberColor = (id) => group.value?.members.find(m => m.id === id)?.colo
 <template>
   <div v-if="group" class="group-detail">
     <header class="group-page-header">
-      <button class="back-btn" @click="router.push('/')">
+      <button class="back-btn" @click="router.push('/groups')">
         <ArrowLeft :size="20" />
       </button>
       <div class="header-content">
         <h1>{{ group.name }}</h1>
         <p>{{ group.description }}</p>
       </div>
-      <button class="btn btn-secondary icon-only">
-        <MoreVertical :size="20" />
-      </button>
+      <div class="header-actions">
+        <div class="menu-wrapper">
+          <button class="btn btn-secondary dropdown-trigger" @click="showGroupMenu = !showGroupMenu">
+            <span>Options</span>
+            <ChevronDown :size="16" />
+          </button>
+          <div v-if="showGroupMenu" class="dropdown-menu" @click.stop>
+            <button class="menu-item" @click="showEditModal = true; showGroupMenu = false">
+              <Pencil :size="16" />
+              <span>Edit Group</span>
+            </button>
+            <button class="menu-item danger" @click="handleDeleteGroup(); showGroupMenu = false">
+              <Trash2 :size="16" />
+              <span>Delete Group</span>
+            </button>
+          </div>
+        </div>
+      </div>
     </header>
 
     <div class="group-actions">
       <div class="balance-summary glass-card">
         <div class="summary-item">
           <span class="label">Group Total</span>
-          <span class="value">{{ formatCurrency(group.totalSpent) }}</span>
+          <span class="value">{{ formatCurrency(totalSpent || 0) }}</span>
         </div>
         <div class="divider"></div>
         <div class="summary-item">
           <span class="label">Your Share</span>
-          <span class="value">{{ formatCurrency(group.totalSpent / group.members.length) }}</span>
+          <span class="value">{{ formatCurrency(yourShare || 0) }}</span>
         </div>
       </div>
       
       <div class="action-buttons">
-        <button class="btn btn-primary" @click="router.push('/add-expense')">
+        <button class="btn btn-primary" @click="showExpenseModal = true">
           <Plus :size="20" />
           <span>Add Expense</span>
         </button>
@@ -203,6 +325,34 @@ const getMemberColor = (id) => group.value?.members.find(m => m.id === id)?.colo
         </div>
       </div>
     </section>
+
+    <!-- Add Expense Modal -->
+    <AddExpenseModal 
+      v-if="showExpenseModal"
+      :group-id="route.params.id"
+      @close="showExpenseModal = false"
+      @success="showExpenseModal = false"
+    />
+
+    <!-- Edit Group Modal -->
+    <EditGroupModal
+      v-if="showEditModal"
+      :group="group"
+      @close="showEditModal = false"
+      @update="handleUpdateGroup"
+      @delete="handleDeleteGroup"
+    />
+
+    <!-- Delete Confirmation Modal -->
+    <ConfirmModal
+      v-if="showDeleteConfirm"
+      :title="expenseToDelete ? 'Delete Expense?' : 'Delete Group?'"
+      :message="expenseToDelete ? 'Are you sure you want to delete this expense? This action cannot be undone.' : 'Are you sure you want to delete this group? All expenses and data will be permanently removed.'"
+      confirm-text="Delete"
+      type="danger"
+      @confirm="expenseToDelete ? confirmDeleteExpense() : confirmDeleteGroup()"
+      @cancel="showDeleteConfirm = false; expenseToDelete = null"
+    />
   </div>
   <div v-else class="loading">
     <p>Loading group details...</p>
@@ -213,54 +363,136 @@ const getMemberColor = (id) => group.value?.members.find(m => m.id === id)?.colo
 .group-detail {
   display: flex;
   flex-direction: column;
-  gap: 2rem;
+  gap: 1.5rem;
+  padding-bottom: 2rem;
 }
 
 .group-page-header {
   display: flex;
   align-items: center;
   gap: 1.5rem;
+  padding: 1.5rem;
+  background: white;
+  border-radius: 16px;
+  margin: 1rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e2e8f0;
 }
 
 .back-btn {
-  background: var(--glass);
-  border: 1px solid var(--glass-border);
-  color: var(--text);
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #0f172a;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
 }
 
 .back-btn:hover {
-  background: var(--glass-border);
+  background: #e2e8f0;
   transform: translateX(-3px);
+}
+
+.header-content {
+  flex: 1;
 }
 
 .header-content h1 {
   font-size: 1.75rem;
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.5rem;
+  color: #0f172a;
+  font-weight: 700;
 }
 
 .header-content p {
-  color: var(--text-muted);
-  font-size: 0.875rem;
+  color: #64748b;
+  font-size: 0.9375rem;
 }
+
+.header-actions .btn {
+  background: white;
+  border: 1px solid #e2e8f0;
+  color: #0f172a;
+}
+
+.header-actions .btn:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.menu-wrapper {
+  position: relative;
+}
+
+.dropdown-trigger {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1rem !important;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+  padding: 0.5rem;
+  min-width: 180px;
+  z-index: 50;
+}
+
+.menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #0f172a;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: left;
+}
+
+.menu-item:hover {
+  background: #f8fafc;
+}
+
+.menu-item.danger {
+  color: #ef4444;
+}
+
+.menu-item.danger:hover {
+  background: #fef2f2;
+}
+
 
 .group-actions {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 1rem;
+  padding: 0 1rem;
 }
 
 @media (min-width: 768px) {
   .group-actions {
     flex-direction: row;
     align-items: stretch;
+    gap: 1.5rem;
   }
 }
 
@@ -270,42 +502,84 @@ const getMemberColor = (id) => group.value?.members.find(m => m.id === id)?.colo
   display: flex;
   align-items: center;
   justify-content: space-around;
-  gap: 1rem;
+  gap: 2rem;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e2e8f0;
 }
 
 .summary-item {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.5rem;
   text-align: center;
+  flex: 1;
 }
 
 .summary-item .label {
-  font-size: 0.75rem;
-  color: var(--text-muted);
+  font-size: 0.8125rem;
+  color: #64748b;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  font-weight: 600;
 }
 
 .summary-item .value {
-  font-size: 1.25rem;
+  font-size: 1.5rem;
   font-weight: 700;
-  color: white;
+  color: #0f172a;
 }
 
 .divider {
   width: 1px;
-  height: 40px;
-  background: var(--glass-border);
+  height: 50px;
+  background: #e2e8f0;
 }
 
 .action-buttons {
-  display: flex;
-  gap: 1rem;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+  padding: 0 1rem;
+}
+
+@media (min-width: 640px) {
+  .action-buttons {
+    grid-template-columns: repeat(3, 1fr);
+  }
 }
 
 .action-buttons .btn {
   flex: 1;
+  justify-content: center;
+  padding: 0.875rem 1.25rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  border-radius: 12px;
+  transition: all 0.2s ease;
+}
+
+.action-buttons .btn-primary {
+  background: #5025d1;
+  border: none;
+  color: white;
+}
+
+.action-buttons .btn-primary:hover {
+  background: #4318b8;
+  transform: translateY(-1px);
+}
+
+.action-buttons .btn-secondary {
+  background: white;
+  border: 1px solid #e2e8f0;
+  color: #0f172a;
+}
+
+.action-buttons .btn-secondary:hover {
+  border-color: #cbd5e1;
+  background: #f8fafc;
 }
 
 .section-header {
@@ -342,6 +616,10 @@ const getMemberColor = (id) => group.value?.members.find(m => m.id === id)?.colo
   cursor: pointer;
 }
 
+.expenses-section {
+  padding: 0 1rem;
+}
+
 .expenses-list {
   display: flex;
   flex-direction: column;
@@ -349,15 +627,21 @@ const getMemberColor = (id) => group.value?.members.find(m => m.id === id)?.colo
 }
 
 .expense-item {
-  padding: 1rem;
+  padding: 1.25rem;
   display: flex;
   align-items: center;
   gap: 1rem;
-  transition: transform 0.2s ease;
+  transition: all 0.3s ease;
+  background: white;
+  border: 2px solid #f1f5f9;
+  border-radius: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 
 .expense-item:hover {
-  transform: scale(1.01);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+  border-color: #e2e8f0;
 }
 
 .expense-icon {

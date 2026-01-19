@@ -1,11 +1,13 @@
 <script setup>
 import { computed } from 'vue'
 import { useAppStore } from '../stores/app'
+import { useToastStore } from '../stores/toast'
 import { useRoute, useRouter } from 'vue-router'
 import { calculateSettlements } from '../utils/calculator'
 import { ArrowLeft, ArrowRight, CheckCircle2 } from 'lucide-vue-next'
 
 const store = useAppStore()
+const toastStore = useToastStore()
 const route = useRoute()
 const router = useRouter()
 
@@ -42,10 +44,10 @@ const settleTransaction = async (tx) => {
       splitData: { [tx.to]: tx.amount },
       isSettlement: true
     })
-    alert('Transaction marked as settled!')
+    toastStore.success('Transaction marked as settled!')
     await store.fetchExpensesByGroup(group.value.id)
   } catch (err) {
-    alert('Error settling transaction: ' + err.message)
+    toastStore.error('Error settling transaction')
   }
 }
 </script>
@@ -98,7 +100,7 @@ const settleTransaction = async (tx) => {
         </div>
         <h2>Everyone is settled!</h2>
         <p>No transactions needed. Great work!</p>
-        <button class="btn btn-primary" @click="router.push(`/group/${group.id}`)">
+        <button class="btn btn-primary" @click="router.push(`/group/${group.id || group.slug}`)">
           Back to Group
         </button>
       </div>

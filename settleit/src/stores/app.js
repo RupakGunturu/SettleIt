@@ -3,6 +3,7 @@ import { ref, watch, computed } from 'vue'
 import { dataService } from '../services/dataService'
 import { useAuthStore } from './auth'
 import { useToastStore } from './toast'
+import { slugify } from '../utils/slugify'
 
 export const useAppStore = defineStore('app', () => {
     const authStore = useAuthStore()
@@ -81,7 +82,10 @@ export const useAppStore = defineStore('app', () => {
         })
     }
 
-    const getGroupById = (id) => groups.value.find(g => g.id === id)
+    const getGroupById = (id) => {
+        // Support both slug and ID lookup
+        return groups.value.find(g => g.id === id || g.slug === id)
+    }
     const getExpensesByGroup = (groupId) => expenses.value.filter(e => e.groupId === groupId)
 
     const addExpense = async (expense) => {
@@ -126,8 +130,9 @@ export const useAppStore = defineStore('app', () => {
             const groupData = {
                 name: groupName,
                 description,
+                slug: slugify(groupName), // Add slug field
                 memberIds: [authStore.user.uid],
-                members: [{ id: authStore.user.uid, name: authStore.user.displayName || 'Me', color: '#6366f1' }],
+                members: [{ id: authStore.user.uid, name: authStore.user.displayName || 'Me', email: authStore.user.email, color: '#6366f1' }],
                 totalSpent: 0,
                 currency: 'INR',
                 createdBy: authStore.user.uid,
@@ -187,42 +192,90 @@ export const useAppStore = defineStore('app', () => {
 
     const inviteMemberByEmail = async (groupId, email) => {
         try {
-            const user = await dataService.findUserByEmail(email)
-            if (!user) {
-                toastStore.error('User not found. They must sign up first.')
+            // Validate email format
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+            if (!emailRegex.test(email)) {
+                toastStore.error('Please enter a valid email address')
                 return
             }
 
             const group = groups.value.find(g => g.id === groupId)
-            if (!group) return
-
-            if (group.memberIds.includes(user.id || user.uid)) {
-                toastStore.error('User is already in the group.')
+            if (!group) {
+                console.error('[inviteMemberByEmail] Group not found:', groupId)
+                toastStore.error('Group not found')
                 return
             }
 
-            const updatedMembers = [...group.members, {
-                id: user.id || user.uid,
-                name: user.displayName,
-                color: '#' + Math.floor(Math.random() * 16777215).toString(16)
-            }]
-            const updatedMemberIds = [...group.memberIds, user.id || user.uid]
+            console.log('[inviteMemberByEmail] Current members:', group.members)
+            console.log('[inviteMemberByEmail] Checking email:', email)
+
+            // Check if email already exists in group (only check members that have emails)
+            const emailExists = group.members.some(m => {
+                // Only check members that have an email field set
+                if (!m.email || m.email.trim() === '') {
+                    return false  // Skip members without email
+                }
+                const isDuplicate = m.email.toLowerCase() === email.toLowerCase()
+                if (isDuplicate) {
+                    console.log('[inviteMemberByEmail] Found duplicate email:', m.email, 'matches', email)
+                }
+                return isDuplicate
+            })
+
+            if (emailExists) {
+                console.log('[inviteMemberByEmail] Email already exists in group')
+                toastStore.error('This email is already in the group.')
+                return
+            }
+
+            // Try to find registered user, but don't require it
+            const user = await dataService.findUserByEmail(email)
+            console.log('[inviteMemberByEmail] User lookup result:', user)
+
+            let newMember
+            if (user) {
+                // User is registered - use their info
+                newMember = {
+                    id: user.id || user.uid,
+                    name: user.displayName || email.split('@')[0],
+                    email: email,
+                    color: '#' + Math.floor(Math.random() * 16777215).toString(16),
+                    isRegistered: true
+                }
+            } else {
+                // User not registered - create member with email
+                newMember = {
+                    id: 'guest_' + Date.now(),
+                    name: email.split('@')[0], // Use email prefix as name
+                    email: email,
+                    color: '#' + Math.floor(Math.random() * 16777215).toString(16),
+                    isRegistered: false
+                }
+            }
+
+            console.log('[inviteMemberByEmail] New member:', newMember)
+
+            const updatedMembers = [...group.members, newMember]
+            const updatedMemberIds = [...group.memberIds, newMember.id]
 
             // Update group in Firestore
+            console.log('[inviteMemberByEmail] Updating group with new member')
             await dataService.updateGroup(groupId, { members: updatedMembers, memberIds: updatedMemberIds })
 
             // Log Activity
             await dataService.logActivity({
                 type: 'member_joined',
-                description: `${user.displayName} joined "${group.name}"`,
+                description: `${newMember.name} (${email}) joined "${group.name}"`,
                 involvedUserIds: updatedMemberIds,
-                userId: user.id || user.uid,
+                userId: newMember.id,
                 groupId: groupId
             })
 
-            toastStore.success(`${user.displayName} invited!`)
+            toastStore.success(`${newMember.name} added to group!`)
+            console.log('[inviteMemberByEmail] Member added successfully')
         } catch (err) {
-            toastStore.error('Failed to invite member')
+            console.error('[inviteMemberByEmail] Error:', err)
+            toastStore.error('Failed to add member: ' + err.message)
         }
     }
 
@@ -266,6 +319,28 @@ export const useAppStore = defineStore('app', () => {
         return await dataService.searchAllExpenses(authStore.user.uid, query)
     }
 
+    const updateGroup = async (groupId, data) => {
+        try {
+            await dataService.updateGroup(groupId, data)
+            toastStore.success('Group updated successfully!')
+        } catch (err) {
+            console.error('[updateGroup] Error:', err)
+            toastStore.error('Failed to update group')
+            throw err
+        }
+    }
+
+    const deleteGroup = async (groupId) => {
+        try {
+            await dataService.deleteGroup(groupId)
+            toastStore.success('Group deleted successfully!')
+        } catch (err) {
+            console.error('[deleteGroup] Error:', err)
+            toastStore.error('Failed to delete group')
+            throw err
+        }
+    }
+
     return {
         groups,
         expenses,
@@ -286,6 +361,8 @@ export const useAppStore = defineStore('app', () => {
         allExpenses,
         addFriend,
         globalSearchExpenses,
-        totalBalance
+        totalBalance,
+        updateGroup,
+        deleteGroup
     }
 })

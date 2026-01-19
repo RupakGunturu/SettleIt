@@ -59,7 +59,13 @@ const formatCurrency = (amount) => {
     style: 'currency',
     currency: 'INR',
     minimumFractionDigits: 0
-  }).format(amount)
+  }).format(amount || 0)
+}
+
+// Calculate total spent for a group from its expenses
+const getGroupTotal = (groupId) => {
+  const groupExpenses = store.allExpenses.filter(e => e.groupId === groupId)
+  return groupExpenses.reduce((sum, expense) => sum + (expense.amount || 0), 0)
 }
 
 // Helper for group initials/icons
@@ -136,7 +142,7 @@ const getGroupIcon = (name) => {
           v-for="group in filteredGroups" 
           :key="group.id" 
           class="group-card"
-          @click="router.push(`/group/${group.id}`)"
+          @click="router.push(`/group/${group.slug || group.id}`)"
         >
           <div class="card-header">
             <div class="icon-box">
@@ -154,7 +160,7 @@ const getGroupIcon = (name) => {
             <div class="financial-snapshot">
               <div class="stat">
                 <span class="label">Total Spent</span>
-                <span class="value">{{ formatCurrency(group.totalSpent || 0) }}</span>
+                <span class="value">{{ formatCurrency(getGroupTotal(group.id)) }}</span>
               </div>
             </div>
           </div>
@@ -180,7 +186,7 @@ const getGroupIcon = (name) => {
           v-for="group in filteredGroups" 
           :key="group.id" 
           class="list-row"
-          @click="router.push(`/group/${group.id}`)"
+          @click="router.push(`/group/${group.slug || group.id}`)"
         >
           <div class="row-left">
             <div class="row-icon">
@@ -195,7 +201,7 @@ const getGroupIcon = (name) => {
           <div class="row-right">
             <div class="row-stat">
               <span class="label">Total</span>
-              <span class="value">{{ formatCurrency(group.totalSpent || 0) }}</span>
+              <span class="value">{{ formatCurrency(getGroupTotal(group.id)) }}</span>
             </div>
             <ChevronRight :size="20" class="text-sub" />
           </div>

@@ -34,7 +34,10 @@ export const dataService = {
         console.log(`[dataService] Subscribing to expenses for group: ${groupId}`)
         const q = query(collection(db, 'expenses'), where('groupId', '==', groupId))
         return onSnapshot(q, (snapshot) => {
-            const expenses = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+            // Filter out deleted expenses
+            const expenses = snapshot.docs
+                .map(doc => ({ id: doc.id, ...doc.data() }))
+                .filter(expense => !expense.deleted)
             console.log(`[dataService] Received ${expenses.length} expenses update`)
             callback(expenses)
         })
@@ -106,7 +109,10 @@ export const dataService = {
             // orderBy('date', 'desc') // Requires Index
         )
         return onSnapshot(q, (snapshot) => {
-            const expenses = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+            // Filter out deleted expenses
+            const expenses = snapshot.docs
+                .map(doc => ({ id: doc.id, ...doc.data() }))
+                .filter(expense => !expense.deleted)
             callback(expenses)
         })
     },
@@ -233,5 +239,11 @@ export const dataService = {
         if (!db) return
         const groupRef = doc(db, 'groups', groupId)
         await updateDoc(groupRef, groupData)
+    },
+
+    async deleteGroup(groupId) {
+        if (!db) return
+        const groupRef = doc(db, 'groups', groupId)
+        await deleteDoc(groupRef)
     }
 }

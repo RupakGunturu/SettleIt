@@ -1,9 +1,21 @@
+```
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import { Html5QrcodeScanner } from 'html5-qrcode'
 import Tesseract from 'tesseract.js'
-import { X, Camera, QrCode, FileText, Loader } from 'lucide-vue-next'
+import * as pdfjsLib from 'pdfjs-dist'
+import { 
+  QrCode, 
+  FileText, 
+  X, 
+  Camera, 
+  Loader,
+  FileUp
+} from 'lucide-vue-next'
 import { parseUpiQrCode, extractExpenseFromOcr } from '../utils/scannerUtils'
+
+// Configure PDF.js worker with proper HTTPS URL
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`
 
 const props = defineProps({
   mode: {
@@ -90,19 +102,145 @@ const onQrScanError = (err) => {
 const handleImageUpload = async (event) => {
   const file = event.target.files[0]
   if (!file) return
-  
-  processing.value = true
-  error.value = ''
-  
+
   try {
-    // Create image preview
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      capturedImage.value = e.target.result
+    processing.value = true
+    error.value = ''
+
+    // Check if it's a PDF
+    if (file.type === 'application/pdf') {
+      await handlePdfUpload(file)
+    } else {
+      // Handle image file
+      const reader = new FileReader()
+      reader.onload = async (e) => {
+        capturedImage.value = e.target.result
+        await performOcr(file)
+      }
+      reader.readAsDataURL(file)
     }
-    reader.readAsDataURL(file)
+  } catch (err) {
+    console.error('Error uploading file:', err)
+    error.value = 'Failed to process file. Please try again.'
+    processing.value = false
+  }
+}
+
+const handlePdfUpload = async (file) => {
+  try {
+    processing.value = true
+    error.value = ''
     
-    // Perform OCR
+    console.log('[PDF] Starting PDF upload:', file.name, 'Size:', file.size)
+    
+    // Read PDF file as ArrayBuffer
+    const arrayBuffer = await file.arrayBuffer()
+    console.log('[PDF] File read as ArrayBuffer, size:', arrayBuffer.byteLength)
+    
+    // Load PDF document
+    const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer })
+    const pdf = await loadingTask.promise
+    console.log('[PDF] PDF loaded successfully, pages:', pdf.numPages)
+    
+    // Extract text from all pages
+    let fullText = ''
+    const numPages = pdf.numPages
+    
+    for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+      const page = await pdf.getPage(pageNum)
+      const textContent = await page.getTextContent()
+      
+      // Improved text extraction preserving spatial layout
+      // Group text items by their Y position (rows in table)
+      const textByRow = {}
+      
+      textContent.items.forEach(item => {
+        const y = Math.round(item.transform[5]) // Y position
+        if (!textByRow[y]) {
+          textByRow[y] = []
+        }
+        textByRow[y].push({
+          text: item.str.trim(),
+          x: item.transform[4] // X position for column ordering
+        })
+      })
+      
+      // Sort rows by Y position (top to bottom)
+      const sortedRows = Object.keys(textByRow)
+        .map(y => parseInt(y))
+        .sort((a, b) => b - a) // Descending (top to bottom)
+      
+      // Build text with preserved row structure
+      let pageText = ''
+      sortedRows.forEach(y => {
+        // Sort items in row by X position (left to right)
+        const rowItems = textByRow[y].sort((a, b) => a.x - b.x)
+        const rowText = rowItems.map(item => item.text).filter(t => t.length > 0).join(' ')
+        if (rowText.trim()) {
+          pageText += rowText + '\n'
+        }
+      })
+      
+      fullText += pageText + '\n'
+      console.log(`[PDF] Page ${pageNum} text length:`, pageText.length)
+      
+      // Update progress
+      ocrProgress.value = Math.round((pageNum / numPages) * 100)
+    }
+    
+    console.log('[PDF] Full extracted text length:', fullText.length)
+    console.log('[PDF] First 500 chars:', fullText.substring(0, 500))
+    
+    // Create a visual representation (render first page)
+    const page = await pdf.getPage(1)
+    const viewport = page.getViewport({ scale: 1.5 })
+    const canvas = document.createElement('canvas')
+    const context = canvas.getContext('2d')
+    canvas.width = viewport.width
+    canvas.height = viewport.height
+    
+    await page.render({
+      canvasContext: context,
+      viewport: viewport
+    }).promise
+    
+    capturedImage.value = canvas.toDataURL()
+    console.log('[PDF] First page rendered to canvas')
+    
+    // Process extracted text through OCR extraction logic
+    if (fullText.trim()) {
+      const parsedData = extractExpenseFromOcr(fullText)
+      console.log('[PDF] Parsed data:', parsedData)
+      
+      extractedData.value = {
+        description: parsedData.merchantName,
+        amount: parsedData.amount,
+        category: parsedData.category,
+        date: parsedData.date,
+        items: parsedData.items,
+        notes: `Scanned from PDF: ${file.name}`,
+        source: 'pdf',
+        rawOcrText: parsedData.rawText
+      }
+      
+      processing.value = false
+      emit('scan-success', extractedData.value)
+    } else {
+      console.error('[PDF] No text extracted from PDF')
+      processing.value = false
+      error.value = 'No text found in PDF. This might be a scanned/image PDF. Please try converting to JPG/PNG first.'
+    }
+    
+  } catch (err) {
+    console.error('[PDF] Error processing PDF:', err)
+    console.error('[PDF] Error details:', err.message, err.stack)
+    error.value = `Failed to extract text from PDF: ${err.message}. Please try an image file (JPG/PNG) instead.`
+    processing.value = false
+  }
+}
+
+const performOcr = async (file) => {
+  try {
     const result = await Tesseract.recognize(
       file,
       'eng',
@@ -179,21 +317,22 @@ const handleClose = () => {
         <!-- OCR Scanner View -->
         <div v-else class="scanner-container">
           <div v-if="!capturedImage" class="upload-area">
-            <Camera :size="64" class="upload-icon" />
-            <h3>Upload Receipt Image</h3>
-            <p>Take a clear photo or upload an existing one</p>
+            <FileUp :size="64" class="upload-icon" />
+            <h3>Upload Receipt</h3>
+            <p>Upload an image (JPG, PNG) or PDF document</p>
             <label for="receipt-upload" class="upload-btn">
               <Camera :size="18" />
-              <span>Choose Image</span>
+              <span>Choose File</span>
             </label>
             <input 
               id="receipt-upload" 
               type="file" 
-              accept="image/*" 
+              accept="image/*,application/pdf" 
               capture="environment"
               @change="handleImageUpload"
               hidden
             >
+            <p class="upload-hint">Supported: JPG, PNG, PDF</p>
           </div>
 
           <div v-else class="preview-area">

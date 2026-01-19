@@ -92,9 +92,8 @@ export function extractExpenseFromOcr(ocrText) {
  */
 function extractLineItems(lines) {
     const items = []
-    // Relaxed price pattern: allow optional decimals (e.g. 50, 50.00, 50.5), optional whitespace
     // Relaxed price pattern: allow optional decimals and trailing non-digit noise (e.g. 240.0C)
-    const pricePattern = /[₹rs.]?\s*(\d+(?:[.,]\d{1,2})?)\s*[^0-9]*$/i
+    const pricePattern = /[₹rs.]?\s*(\d+(?:[.,]\d{1,2})?\d*)\s*[^0-9]*$/i
     const quantityPattern = /^(\d+)\s*([xX*@]|pcs|nos|units)?\s*/i
 
     // 1. Robust Header Detection
@@ -103,7 +102,7 @@ function extractLineItems(lines) {
     let foundHeader = false
     for (let i = 0; i < lines.length; i++) {
         const lowerLine = lines[i].toLowerCase()
-        if (lowerLine.includes('item') && (lowerLine.includes('qty') || lowerLine.includes('price') || lowerLine.includes('amount') || lowerLine.includes('rate'))) {
+        if (lowerLine.includes('item') && (lowerLine.includes('qty') || lowerLine.includes('price') || lowerLine.includes('amount') || lowerLine.includes('rate') || lowerLine.includes('particulars'))) {
             startIndex = i + 1
             foundHeader = true
             break
@@ -125,17 +124,30 @@ function extractLineItems(lines) {
         const lowerLine = line.toLowerCase()
 
         // Stop processing if we hit footer markers
-        if (/thank you|visit again|have a nice day|customer copy/i.test(lowerLine)) break
+        if (/thank you|visit again|have a nice day|customer copy|amount in words|settled through|supply attracts/i.test(lowerLine)) break
 
         // Skip empty lines or total/tax/header strings
-        if (!line || /total|subtotal|amount due|change return/i.test(lowerLine)) continue
-        if (/^date|^invoice|^bill/i.test(lowerLine)) continue
+        if (!line || /total|subtotal|amount due|change return|item\(s\) total/i.test(lowerLine)) continue
+        if (/^date|^invoice|^bill|^tax invoice/i.test(lowerLine)) continue
+
+        // ENHANCED: Skip metadata that's not food items
+        // Skip delivery addresses, customer info, HSN codes, GSTIN, FSSAI, etc.
+        if (/delivery address|customer name|hsn code|gstin|fssai|service description|restaurant name|restaurant address|restaurant gstin|invoice no|invoice date|state name|place of supply/i.test(lowerLine)) continue
 
         // Skip location/address lines (common false positives)
-        if (/hyderabad|telangana|road|st\.|street|marg|pincode|pin\s*code|ph:|phone|gstin|fssai/i.test(lowerLine)) continue
+        if (/hyderabad|telangana|road|st\.|street|marg|pincode|pin\s*code|ph:|phone|opposite|near|dlf|gachibowli/i.test(lowerLine)) continue
 
-        // Skip specific metadata
-        if (/cashier|token no|bill no|name:/i.test(lowerLine)) continue
+        // Skip specific metadata patterns
+        if (/cashier|token no|bill no|order id|payment|mode|received against/i.test(lowerLine)) continue
+
+        // Skip lines that are just numbers (like HSN codes, pincodes)
+        if (/^\d{5,}$/.test(line)) continue
+
+        // Skip lines with "Comma mania" type gibberish (OCR artifacts)
+        if (/comma mania|mania|settled through digital/i.test(lowerLine)) continue
+
+        // Skip packaging charges, service charges (we want food items only)
+        if (/packaging charge|service charge|delivery charge|convenience fee/i.test(lowerLine)) continue
 
         const priceMatch = line.match(pricePattern)
         if (priceMatch) {
@@ -198,18 +210,27 @@ function extractLineItems(lines) {
 
             // Cleanup name
             let name = remainingText
-            name = name.replace(/^\d+[.)-]\s*/, '') // Remove "1." list markers
+            name = name.replace(/^(\d+)[.)\-]\s*/, '') // Remove "1." list markers
             name = name.replace(/^[^a-zA-Z0-9(]+/, '') // Remove leading symbols
-            name = name.replace(/[:.-]+$/, '')
+            name = name.replace(/[:.\-]+$/, '')
             name = name.trim()
 
-            if (name.length > 2 && lineTotal > 0) {
-                items.push({
-                    id: Date.now() + i,
-                    name: name,
-                    quantity: quantity,
-                    amount: unitPrice
-                })
+            // ENHANCED: Additional validation for actual food items
+            // Name should be reasonable length and not look like metadata
+            if (name.length > 2 && name.length < 100 && lineTotal > 0) {
+                // Skip if name looks like metadata patterns
+                if (!/^\d+$/.test(name) && // Not just numbers
+                    !/^[A-Z]{2,}\d+/.test(name) && // Not codes like "HSN996331"
+                    !name.match(/^\d{5,}/) && // Not starting with long numbers
+                    !/amount of inr|settled|supply|reverse charge/i.test(name)) { // Not payment info
+
+                    items.push({
+                        id: Date.now() + i,
+                        name: name,
+                        quantity: quantity,
+                        amount: unitPrice
+                    })
+                }
             }
         }
     }
