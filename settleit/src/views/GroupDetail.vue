@@ -1,5 +1,6 @@
 <script setup>
 import { useAppStore } from '../stores/app'
+import { useAuthStore } from '../stores/auth'
 import { useToastStore } from '../stores/toast'
 import { useRoute, useRouter } from 'vue-router'
 import { computed, onMounted, ref, watch } from 'vue'
@@ -29,6 +30,7 @@ import ConfirmModal from '../components/ConfirmModal.vue'
 import EditGroupModal from '../components/EditGroupModal.vue'
 
 const store = useAppStore()
+const authStore = useAuthStore()
 const toastStore = useToastStore()
 const route = useRoute()
 const router = useRouter()
@@ -157,10 +159,33 @@ const totalSpent = computed(() => {
   return expenses.value.reduce((sum, expense) => sum + (expense.amount || 0), 0)
 })
 
-// Calculate user's share
-const yourShare = computed(() => {
-  if (!group.value || group.value.members.length === 0) return 0
-  return totalSpent.value / group.value.members.length
+// Calculate user's personal balance
+const yourBalance = computed(() => {
+  if (!group.value || !authStore.user) return 0
+  
+  const userId = authStore.user.uid
+  const memberCount = group.value.members.length
+  
+  if (memberCount === 0) return 0
+  
+  // Calculate how much you paid
+  const totalYouPaid = expenses.value
+    .filter(e => e.paidBy === userId)
+    .reduce((sum, expense) => sum + (expense.amount || 0), 0)
+  
+  // Calculate your share of all expenses
+  const yourTotalShare = expenses.value.reduce((sum, expense) => {
+    // Check if you're in the split for this expense
+    if (expense.splitWith && expense.splitWith.includes(userId)) {
+      return sum + (expense.amount / expense.splitWith.length)
+    }
+    // Fallback: equal split among all members
+    return sum + (expense.amount / memberCount)
+  }, 0)
+  
+  // Balance = what you paid - what you owe
+  // Positive = others owe you, Negative = you owe others
+  return totalYouPaid - yourTotalShare
 })
 
 const formatCurrency = (amount, currency = 'INR') => {
@@ -228,8 +253,10 @@ const getMemberColor = (id) => group.value?.members.find(m => m.id === id)?.colo
         </div>
         <div class="divider"></div>
         <div class="summary-item">
-          <span class="label">Your Share</span>
-          <span class="value">{{ formatCurrency(yourShare || 0) }}</span>
+          <span class="label">{{ yourBalance >= 0 ? 'You are owed' : 'You owe' }}</span>
+          <span class="value" :class="{ 'positive': yourBalance > 0, 'negative': yourBalance < 0, 'settled': yourBalance === 0 }">
+            {{ formatCurrency(Math.abs(yourBalance || 0)) }}
+          </span>
         </div>
       </div>
       
@@ -370,13 +397,23 @@ const getMemberColor = (id) => group.value?.members.find(m => m.id === id)?.colo
 .group-page-header {
   display: flex;
   align-items: center;
-  gap: 1.5rem;
-  padding: 1.5rem;
+  gap: 0.75rem;
+  padding: 1rem;
   background: white;
   border-radius: 16px;
-  margin: 1rem;
+  margin: 0.5rem;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
   border: 1px solid #e2e8f0;
+  flex-wrap: wrap;
+}
+
+@media (min-width: 768px) {
+  .group-page-header {
+    gap: 1.5rem;
+    padding: 1.5rem;
+    margin: 1rem;
+    flex-wrap: nowrap;
+  }
 }
 
 .back-btn {
@@ -400,18 +437,39 @@ const getMemberColor = (id) => group.value?.members.find(m => m.id === id)?.colo
 
 .header-content {
   flex: 1;
+  min-width: 0;
 }
 
 .header-content h1 {
-  font-size: 1.75rem;
-  margin-bottom: 0.5rem;
+  font-size: 1.25rem;
+  margin-bottom: 0.25rem;
   color: #0f172a;
   font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (min-width: 768px) {
+  .header-content h1 {
+    font-size: 1.75rem;
+    margin-bottom: 0.5rem;
+    white-space: normal;
+  }
 }
 
 .header-content p {
   color: #64748b;
-  font-size: 0.9375rem;
+  font-size: 0.8125rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (min-width: 768px) {
+  .header-content p {
+    font-size: 0.9375rem;
+  }
 }
 
 .header-actions .btn {
@@ -433,9 +491,17 @@ const getMemberColor = (id) => group.value?.members.find(m => m.id === id)?.colo
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.625rem 1rem !important;
-  font-size: 0.875rem;
+  padding: 0.5rem 0.75rem !important;
+  font-size: 0.8125rem;
   font-weight: 600;
+  white-space: nowrap;
+}
+
+@media (min-width: 768px) {
+  .dropdown-trigger {
+    padding: 0.625rem 1rem !important;
+    font-size: 0.875rem;
+  }
 }
 
 .dropdown-menu {
@@ -498,43 +564,91 @@ const getMemberColor = (id) => group.value?.members.find(m => m.id === id)?.colo
 
 .balance-summary {
   flex: 1;
-  padding: 1.5rem;
+  padding: 1rem;
   display: flex;
   align-items: center;
   justify-content: space-around;
-  gap: 2rem;
+  gap: 1rem;
   background: white;
   border-radius: 16px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
   border: 1px solid #e2e8f0;
 }
 
+@media (min-width: 768px) {
+  .balance-summary {
+    padding: 1.5rem;
+    gap: 2rem;
+  }
+}
+
 .summary-item {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.25rem;
   text-align: center;
   flex: 1;
+  min-width: 0;
+}
+
+@media (min-width: 768px) {
+  .summary-item {
+    gap: 0.5rem;
+  }
 }
 
 .summary-item .label {
-  font-size: 0.8125rem;
+  font-size: 0.625rem;
   color: #64748b;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (min-width: 768px) {
+  .summary-item .label {
+    font-size: 0.8125rem;
+  }
 }
 
 .summary-item .value {
-  font-size: 1.5rem;
+  font-size: 1.125rem;
   font-weight: 700;
   color: #0f172a;
+  word-break: break-word;
+}
+
+@media (min-width: 768px) {
+  .summary-item .value {
+    font-size: 1.5rem;
+  }
+}
+
+.summary-item .value.positive {
+  color: #10b981;
+}
+
+.summary-item .value.negative {
+  color: #ef4444;
+}
+
+.summary-item .value.settled {
+  color: #64748b;
 }
 
 .divider {
   width: 1px;
-  height: 50px;
+  height: 40px;
   background: #e2e8f0;
+}
+
+@media (min-width: 768px) {
+  .divider {
+    height: 50px;
+  }
 }
 
 .action-buttons {
