@@ -5,25 +5,9 @@ import { useToastStore } from '../stores/toast'
 import { useRoute, useRouter } from 'vue-router'
 import { computed, onMounted, ref, watch } from 'vue'
 import { 
-  ArrowLeft, 
-  Plus, 
-  Receipt, 
-  CreditCard, 
-  Filter, 
-  Utensils, 
-  Car, 
-  Home, 
-  ShoppingBag,
-  ChevronDown,
-  Users,
-  Trash2,
-  Pencil,
-  Tv,
-  Stethoscope,
-  BookOpen,
-  Plane,
-  Coffee,
-  FileText
+  ArrowLeft, Plus, MoreVertical, Users, Trash2, Pencil,
+  Utensils, Car, Home, ShoppingBag, Tv, Stethoscope,
+  BookOpen, Plane, Coffee, Receipt
 } from 'lucide-vue-next'
 import AddExpenseModal from '../components/AddExpenseModal.vue'
 import ConfirmModal from '../components/ConfirmModal.vue'
@@ -43,25 +27,21 @@ const showDeleteConfirm = ref(false)
 const expenseToDelete = ref(null)
 const newMemberEmail = ref('')
 
+// All existing functions preserved
 const addMember = async () => {
   if (!newMemberEmail.value) {
     toastStore.error('Please enter an email address')
     return
   }
-  
   if (!group.value) {
     toastStore.error('Group not found')
     return
   }
-  
-  console.log('[GroupDetail] Adding member:', newMemberEmail.value, 'to group:', group.value.id)
-  
   try {
     await store.inviteMemberByEmail(group.value.id, newMemberEmail.value)
     newMemberEmail.value = ''
   } catch (err) {
     console.error('[GroupDetail] Error adding member:', err)
-    // Error toast is shown by the store
   }
 }
 
@@ -83,9 +63,7 @@ const handleUpdateGroup = async (data) => {
     toastStore.error('Group not found')
     return
   }
-  
   try {
-    console.log('[GroupDetail] Updating group:', group.value.id, data)
     await store.updateGroup(group.value.id, {
       name: data.name,
       description: data.description,
@@ -102,7 +80,7 @@ const handleUpdateGroup = async (data) => {
 const handleDeleteGroup = async () => {
   showEditModal.value = false
   showDeleteConfirm.value = true
-  expenseToDelete.value = null // Use this to distinguish group delete
+  expenseToDelete.value = null
 }
 
 const confirmDeleteGroup = async () => {
@@ -110,9 +88,7 @@ const confirmDeleteGroup = async () => {
     toastStore.error('Group not found')
     return
   }
-  
   try {
-    console.log('[GroupDetail] Deleting group:', group.value.id)
     await store.deleteGroup(group.value.id)
     showDeleteConfirm.value = false
     toastStore.success('Group deleted successfully!')
@@ -123,22 +99,45 @@ const confirmDeleteGroup = async () => {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
+  console.log('[GroupDetail] Component mounted, route param:', route.params.id)
+  
+  // Wait for groups to load if they haven't yet
+  let attempts = 0
+  while (store.groups.length === 0 && attempts < 50) {
+    console.log('[GroupDetail] Waiting for groups to load... attempt', attempts + 1)
+    await new Promise(resolve => setTimeout(resolve, 100))
+    attempts++
+  }
+  
+  if (store.groups.length === 0) {
+    console.error('[GroupDetail] Groups failed to load after 5 seconds')
+    return
+  }
+  
   const groupData = store.getGroupById(route.params.id)
   if (groupData) {
-    console.log('[GroupDetail] Mounted with group:', groupData.name, 'ID:', groupData.id)
+    console.log('[GroupDetail] Group found:', groupData.name, 'ID:', groupData.id)
     store.subscribeToExpenses(groupData.id)
   } else {
     console.error('[GroupDetail] Group not found for param:', route.params.id)
   }
 })
 
-// Watch for route changes (when navigating between different groups)
-watch(() => route.params.id, (newId, oldId) => {
+watch(() => route.params.id, async (newId, oldId) => {
   if (newId && newId !== oldId) {
+    console.log('[GroupDetail] Route changed to:', newId)
+    
+    // Wait for groups to load if they haven't yet
+    let attempts = 0
+    while (store.groups.length === 0 && attempts < 50) {
+      await new Promise(resolve => setTimeout(resolve, 100))
+      attempts++
+    }
+    
     const groupData = store.getGroupById(newId)
     if (groupData) {
-      console.log('[GroupDetail] Route changed, reloading group:', groupData.name, 'ID:', groupData.id)
+      console.log('[GroupDetail] Reloading group:', groupData.name)
       store.subscribeToExpenses(groupData.id)
     } else {
       console.error('[GroupDetail] Group not found for param:', newId)
@@ -146,222 +145,185 @@ watch(() => route.params.id, (newId, oldId) => {
   }
 })
 
-
 const group = computed(() => store.getGroupById(route.params.id))
 const expenses = computed(() => {
-  // Use the actual group ID, not the route param (which might be a slug)
   if (!group.value) return []
   return store.getExpensesByGroup(group.value.id)
 })
 
-// Calculate total spent from actual expenses
 const totalSpent = computed(() => {
   return expenses.value.reduce((sum, expense) => sum + (expense.amount || 0), 0)
 })
 
-// Calculate user's personal balance
 const yourBalance = computed(() => {
   if (!group.value || !authStore.user) return 0
-  
   const userId = authStore.user.uid
   const memberCount = group.value.members.length
-  
   if (memberCount === 0) return 0
   
-  // Calculate how much you paid
   const totalYouPaid = expenses.value
     .filter(e => e.paidBy === userId)
     .reduce((sum, expense) => sum + (expense.amount || 0), 0)
   
-  // Calculate your share of all expenses
   const yourTotalShare = expenses.value.reduce((sum, expense) => {
-    // Check if you're in the split for this expense
     if (expense.splitWith && expense.splitWith.includes(userId)) {
       return sum + (expense.amount / expense.splitWith.length)
     }
-    // Fallback: equal split among all members
     return sum + (expense.amount / memberCount)
   }, 0)
   
-  // Balance = what you paid - what you owe
-  // Positive = others owe you, Negative = you owe others
   return totalYouPaid - yourTotalShare
 })
 
-const formatCurrency = (amount, currency = 'INR') => {
+const formatCurrency = (amount) => {
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
-    currency: group.value?.currency || currency,
+    currency: 'INR',
     minimumFractionDigits: 0
   }).format(amount)
 }
 
 const getCategoryIcon = (category) => {
-  switch (category?.toLowerCase()) {
-    case 'food': return Utensils
-    case 'coffee': return Coffee
-    case 'groceries': return ShoppingBag
-    case 'transport': return Car
-    case 'utilities': return Home
-    case 'entertainment': return Tv
-    case 'health': return Stethoscope
-    case 'education': return BookOpen
-    case 'travel': return Plane
-    default: return Receipt
+  const icons = {
+    food: Utensils, coffee: Coffee, groceries: ShoppingBag,
+    transport: Car, utilities: Home, entertainment: Tv,
+    health: Stethoscope, education: BookOpen, travel: Plane
   }
+  return icons[category?.toLowerCase()] || Receipt
 }
 
+const getCategoryColor = (category) => category?.toLowerCase() || 'default'
+
 const getMemberName = (id) => group.value?.members.find(m => m.id === id)?.name || 'Unknown'
-const getMemberColor = (id) => group.value?.members.find(m => m.id === id)?.color || 'var(--primary)'
 </script>
 
 <template>
-  <div v-if="group" class="group-detail">
-    <header class="group-page-header">
-      <button class="back-btn" @click="router.push('/groups')">
+  <div v-if="group" class="modern-group-detail">
+    <!-- Modern Header -->
+    <header class="modern-header">
+      <button class="icon-btn" @click="router.push('/groups')">
         <ArrowLeft :size="20" />
       </button>
-      <div class="header-content">
+      <div class="header-title">
         <h1>{{ group.name }}</h1>
-        <p>{{ group.description }}</p>
+        <p v-if="group.description">{{ group.description }}</p>
       </div>
-      <div class="header-actions">
-        <div class="menu-wrapper">
-          <button class="btn btn-secondary dropdown-trigger" @click="showGroupMenu = !showGroupMenu">
-            <span>Options</span>
-            <ChevronDown :size="16" />
+      <button class="icon-btn" @click="showGroupMenu = !showGroupMenu">
+        <MoreVertical :size="20" />
+      </button>
+      
+      <div v-if="showGroupMenu" class="dropdown-overlay" @click="showGroupMenu = false">
+        <div class="dropdown-content" @click.stop>
+          <button class="dropdown-item" @click="showEditModal = true; showGroupMenu = false">
+            <Pencil :size="18" />
+            <span>Edit Group</span>
           </button>
-          <div v-if="showGroupMenu" class="dropdown-menu" @click.stop>
-            <button class="menu-item" @click="showEditModal = true; showGroupMenu = false">
-              <Pencil :size="16" />
-              <span>Edit Group</span>
-            </button>
-            <button class="menu-item danger" @click="handleDeleteGroup(); showGroupMenu = false">
-              <Trash2 :size="16" />
-              <span>Delete Group</span>
-            </button>
-          </div>
+          <button class="dropdown-item" @click="showMembers = true; showGroupMenu = false">
+            <Users :size="18" />
+            <span>Manage Members</span>
+          </button>
+          <button class="dropdown-item danger" @click="handleDeleteGroup(); showGroupMenu = false">
+            <Trash2 :size="18" />
+            <span>Delete Group</span>
+          </button>
         </div>
       </div>
     </header>
 
-    <div class="group-actions">
-      <div class="balance-summary glass-card">
-        <div class="summary-item">
-          <span class="label">Group Total</span>
-          <span class="value">{{ formatCurrency(totalSpent || 0) }}</span>
-        </div>
-        <div class="divider"></div>
-        <div class="summary-item">
-          <span class="label">{{ yourBalance >= 0 ? 'You are owed' : 'You owe' }}</span>
-          <span class="value" :class="{ 'positive': yourBalance > 0, 'negative': yourBalance < 0, 'settled': yourBalance === 0 }">
-            {{ formatCurrency(Math.abs(yourBalance || 0)) }}
-          </span>
-        </div>
+    <!-- Balance Cards -->
+    <div class="balance-cards">
+      <div class="balance-card">
+        <span class="balance-label">Group Total</span>
+        <span class="balance-value">{{ formatCurrency(totalSpent) }}</span>
       </div>
       
-      <div class="action-buttons">
-        <button class="btn btn-primary" @click="showExpenseModal = true">
-          <Plus :size="20" />
-          <span>Add Expense</span>
-        </button>
-        <button class="btn btn-secondary" @click="router.push(`/group/${group.id}/settle`)">
-          <CreditCard :size="20" />
-          <span>Settle Up</span>
-        </button>
-        <button class="btn btn-secondary" @click="showMembers = !showMembers">
-          <Users :size="20" />
-          <span>Members</span>
-        </button>
+      <div class="balance-card">
+        <span class="balance-label">{{ yourBalance >= 0 ? 'You are owed' : 'You owe' }}</span>
+        <span class="balance-value" :class="{ 'positive': yourBalance > 0, 'negative': yourBalance < 0, 'settled': yourBalance === 0 }">
+          {{ formatCurrency(Math.abs(yourBalance)) }}
+        </span>
       </div>
     </div>
 
-    <!-- Members Section -->
-    <transition name="slide">
-      <section v-if="showMembers" class="members-section glass-card">
-        <div class="section-header">
-          <h3>Group Members</h3>
-        </div>
-        <div class="members-grid">
-          <div v-for="member in group.members" :key="member.id" class="member-card">
-            <div class="avatar" :style="{ backgroundColor: member.color }">
-              {{ member.name[0] }}
-            </div>
-            <div class="member-info">
-              <span class="name">{{ member.name }}</span>
-              <span class="role">{{ member.id === group.createdBy ? 'Admin' : 'Member' }}</span>
-            </div>
-          </div>
-          
-          <div class="add-member-form">
-            <input v-model="newMemberEmail" type="email" placeholder="friend@example.com">
-            <button class="btn btn-primary btn-sm" @click="addMember">Add</button>
-          </div>
-        </div>
-      </section>
-    </transition>
-
-    <section class="expenses-section">
+    <!-- Expenses List -->
+    <div class="expenses-section">
       <div class="section-header">
-        <div class="title-with-count">
-          <h2>Group Ledger</h2>
-          <span class="count-badge">{{ expenses.length }}</span>
-        </div>
-        <button class="filter-btn">
-          <Filter :size="18" />
-          <span>Filter</span>
-        </button>
+        <h2>Transactions</h2>
+        <span class="expense-count">{{ expenses.length }}</span>
       </div>
 
       <div class="expenses-list">
-        <div 
-          v-for="expense in expenses" 
-          :key="expense.id" 
-          class="expense-item glass-card"
-        >
-          <div class="expense-icon" :class="expense.category.toLowerCase()">
+        <div v-for="expense in expenses" :key="expense.id" class="expense-card">
+          <div class="expense-icon" :class="getCategoryColor(expense.category)">
             <component :is="getCategoryIcon(expense.category)" :size="20" />
           </div>
           
-          <div class="expense-info">
-            <h4 class="expense-desc">{{ expense.description }}</h4>
+          <div class="expense-details">
+            <h3>{{ expense.description }}</h3>
             <p class="expense-meta">
-                Paid by <span class="payer" :style="{ color: getMemberColor(expense.paidBy) }">{{ getMemberName(expense.paidBy) }}</span> 
-                • {{ new Date(expense.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) }}
-                <span v-if="expense.documentUrl" class="doc-badge-inline" title="Has receipt">
-                  <FileText :size="10" />
-                  Doc
-                </span>
-              </p>
+              Paid by {{ getMemberName(expense.paidBy) }} • 
+              {{ new Date(expense.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) }}
+            </p>
           </div>
           
-          <div class="expense-amount-box">
+          <div class="expense-amount-section">
             <span class="expense-amount">{{ formatCurrency(expense.amount) }}</span>
-            <span class="your-share">Your share: {{ formatCurrency(expense.amount / group.members.length) }}</span>
-          </div>
-
-          <div class="expense-actions">
-            <button class="icon-btn-sm" @click="deleteExpense(expense.id)">
+            <button class="delete-icon-btn" @click="deleteExpense(expense.id)">
               <Trash2 :size="16" />
             </button>
           </div>
         </div>
         
-        <div v-if="expenses.length === 0" class="empty-state glass-card">
-          <p>No expenses found. Time to add some!</p>
+        <div v-if="expenses.length === 0" class="empty-state">
+          <Receipt :size="48" class="empty-icon" />
+          <p>No expenses yet</p>
+          <span>Add your first expense to get started</span>
         </div>
       </div>
-    </section>
+    </div>
 
-    <!-- Add Expense Modal -->
+    <!-- FAB -->
+    <button class="fab" @click="showExpenseModal = true">
+      <Plus :size="24" />
+    </button>
+
+    <!-- Members Modal -->
+    <transition name="modal">
+      <div v-if="showMembers" class="modal-overlay" @click="showMembers = false">
+        <div class="modal-card" @click.stop>
+          <div class="modal-header">
+            <h3>Group Members</h3>
+            <button class="close-btn" @click="showMembers = false">×</button>
+          </div>
+          
+          <div class="members-list">
+            <div v-for="member in group.members" :key="member.id" class="member-item">
+              <div class="member-avatar" :style="{ backgroundColor: member.color }">
+                {{ member.name[0] }}
+              </div>
+              <div class="member-info">
+                <span class="member-name">{{ member.name }}</span>
+                <span class="member-role">{{ member.id === group.createdBy ? 'Admin' : 'Member' }}</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="add-member-section">
+            <input v-model="newMemberEmail" type="email" placeholder="Enter email to add member" class="member-input">
+            <button class="add-member-btn" @click="addMember">Add</button>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <!-- Existing Modals -->
     <AddExpenseModal 
       v-if="showExpenseModal"
-      :group-id="route.params.id"
+      :group-id="group.id"
       @close="showExpenseModal = false"
       @success="showExpenseModal = false"
     />
 
-    <!-- Edit Group Modal -->
     <EditGroupModal
       v-if="showEditModal"
       :group="group"
@@ -370,11 +332,10 @@ const getMemberColor = (id) => group.value?.members.find(m => m.id === id)?.colo
       @delete="handleDeleteGroup"
     />
 
-    <!-- Delete Confirmation Modal -->
     <ConfirmModal
       v-if="showDeleteConfirm"
       :title="expenseToDelete ? 'Delete Expense?' : 'Delete Group?'"
-      :message="expenseToDelete ? 'Are you sure you want to delete this expense? This action cannot be undone.' : 'Are you sure you want to delete this group? All expenses and data will be permanently removed.'"
+      :message="expenseToDelete ? 'Are you sure you want to delete this expense?' : 'Are you sure you want to delete this group? All expenses will be removed.'"
       confirm-text="Delete"
       type="danger"
       @confirm="expenseToDelete ? confirmDeleteExpense() : confirmDeleteGroup()"
@@ -382,538 +343,496 @@ const getMemberColor = (id) => group.value?.members.find(m => m.id === id)?.colo
     />
   </div>
   <div v-else class="loading">
-    <p>Loading group details...</p>
+    <p>Loading...</p>
   </div>
 </template>
 
 <style scoped>
-.group-detail {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-  padding-bottom: 2rem;
+.modern-group-detail {
+  min-height: 100vh;
+  background: #F9FAFB;
+  padding: 1rem;
+  padding-bottom: 100px;
 }
 
-.group-page-header {
+.modern-header {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 1rem;
-  background: white;
-  border-radius: 16px;
-  margin: 0.5rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  border: 1px solid #e2e8f0;
-  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  position: relative;
 }
 
-@media (min-width: 768px) {
-  .group-page-header {
-    gap: 1.5rem;
-    padding: 1.5rem;
-    margin: 1rem;
-    flex-wrap: nowrap;
-  }
-}
-
-.back-btn {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  color: #0f172a;
-  width: 44px;
-  height: 44px;
+.icon-btn {
+  width: 40px;
+  height: 40px;
   border-radius: 12px;
+  background: rgba(255, 255, 255, 0.9);
+  border: none;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
-.back-btn:hover {
-  background: #e2e8f0;
-  transform: translateX(-3px);
+.icon-btn:hover {
+  background: white;
+  transform: scale(1.05);
 }
 
-.header-content {
+.header-title {
   flex: 1;
   min-width: 0;
 }
 
-.header-content h1 {
-  font-size: 1.25rem;
-  margin-bottom: 0.25rem;
-  color: #0f172a;
+.header-title h1 {
+  font-size: 1.5rem;
   font-weight: 700;
+  color: #1F2937;
+  margin: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-@media (min-width: 768px) {
-  .header-content h1 {
-    font-size: 1.75rem;
-    margin-bottom: 0.5rem;
-    white-space: normal;
-  }
-}
-
-.header-content p {
-  color: #64748b;
-  font-size: 0.8125rem;
+.header-title p {
+  font-size: 0.875rem;
+  color: #6B7280;
+  margin: 0.25rem 0 0 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-@media (min-width: 768px) {
-  .header-content p {
-    font-size: 0.9375rem;
-  }
+.dropdown-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
 }
 
-.header-actions .btn {
-  background: white;
-  border: 1px solid #e2e8f0;
-  color: #0f172a;
-}
-
-.header-actions .btn:hover {
-  background: #f8fafc;
-  border-color: #cbd5e1;
-}
-
-.menu-wrapper {
-  position: relative;
-}
-
-.dropdown-trigger {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 0.75rem !important;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-@media (min-width: 768px) {
-  .dropdown-trigger {
-    padding: 0.625rem 1rem !important;
-    font-size: 0.875rem;
-  }
-}
-
-.dropdown-menu {
+.dropdown-content {
   position: absolute;
-  top: calc(100% + 0.5rem);
+  top: 50px;
   right: 0;
   background: white;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+  border-radius: 16px;
   padding: 0.5rem;
-  min-width: 180px;
-  z-index: 50;
+  min-width: 200px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+  z-index: 101;
 }
 
-.menu-item {
+.dropdown-item {
   width: 100%;
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.75rem;
+  padding: 0.875rem 1rem;
   border: none;
   background: transparent;
-  border-radius: 8px;
-  font-size: 0.875rem;
+  border-radius: 12px;
+  font-size: 0.9375rem;
   font-weight: 500;
-  color: #0f172a;
+  color: #1F2937;
   cursor: pointer;
   transition: all 0.2s;
   text-align: left;
 }
 
-.menu-item:hover {
-  background: #f8fafc;
+.dropdown-item:hover {
+  background: #F3F4F6;
 }
 
-.menu-item.danger {
-  color: #ef4444;
+.dropdown-item.danger {
+  color: #EF4444;
 }
 
-.menu-item.danger:hover {
-  background: #fef2f2;
+.dropdown-item.danger:hover {
+  background: #FEF2F2;
 }
 
-
-.group-actions {
-  display: flex;
-  flex-direction: column;
+.balance-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 1rem;
-  padding: 0 1rem;
+  margin-bottom: 1.5rem;
 }
 
-@media (min-width: 768px) {
-  .group-actions {
-    flex-direction: row;
-    align-items: stretch;
-    gap: 1.5rem;
+@media (max-width: 640px) {
+  .balance-cards {
+    grid-template-columns: 1fr;
   }
 }
 
-.balance-summary {
-  flex: 1;
-  padding: 1rem;
-  display: flex;
-  align-items: center;
-  justify-content: space-around;
-  gap: 1rem;
+.balance-card {
   background: white;
-  border-radius: 16px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  border: 1px solid #e2e8f0;
-}
-
-@media (min-width: 768px) {
-  .balance-summary {
-    padding: 1.5rem;
-    gap: 2rem;
-  }
-}
-
-.summary-item {
+  border-radius: 20px;
+  padding: 1.25rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
-  text-align: center;
-  flex: 1;
-  min-width: 0;
+  gap: 0.5rem;
 }
 
-@media (min-width: 768px) {
-  .summary-item {
-    gap: 0.5rem;
-  }
-}
-
-.summary-item .label {
-  font-size: 0.625rem;
-  color: #64748b;
+.balance-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #6B7280;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
-@media (min-width: 768px) {
-  .summary-item .label {
-    font-size: 0.8125rem;
-  }
-}
-
-.summary-item .value {
-  font-size: 1.125rem;
+.balance-value {
+  font-size: 1.75rem;
   font-weight: 700;
-  color: #0f172a;
-  word-break: break-word;
+  color: #1F2937;
 }
 
-@media (min-width: 768px) {
-  .summary-item .value {
-    font-size: 1.5rem;
-  }
-}
+.balance-value.positive { color: #10B981; }
+.balance-value.negative { color: #EF4444; }
+.balance-value.settled { color: #6B7280; }
 
-.summary-item .value.positive {
-  color: #10b981;
-}
-
-.summary-item .value.negative {
-  color: #ef4444;
-}
-
-.summary-item .value.settled {
-  color: #64748b;
-}
-
-.divider {
-  width: 1px;
-  height: 40px;
-  background: #e2e8f0;
-}
-
-@media (min-width: 768px) {
-  .divider {
-    height: 50px;
-  }
-}
-
-.action-buttons {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 0.75rem;
-  padding: 0 1rem;
-}
-
-@media (min-width: 640px) {
-  .action-buttons {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-
-.action-buttons .btn {
-  flex: 1;
-  justify-content: center;
-  padding: 0.875rem 1.25rem;
-  font-size: 0.9375rem;
-  font-weight: 600;
-  border-radius: 12px;
-  transition: all 0.2s ease;
-}
-
-.action-buttons .btn-primary {
-  background: #5025d1;
-  border: none;
-  color: white;
-}
-
-.action-buttons .btn-primary:hover {
-  background: #4318b8;
-  transform: translateY(-1px);
-}
-
-.action-buttons .btn-secondary {
+.expenses-section {
   background: white;
-  border: 1px solid #e2e8f0;
-  color: #0f172a;
-}
-
-.action-buttons .btn-secondary:hover {
-  border-color: #cbd5e1;
-  background: #f8fafc;
+  border-radius: 24px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
 .section-header {
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
 }
 
-.title-with-count {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
+.section-header h2 {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #1F2937;
+  margin: 0;
 }
 
-.count-badge {
-  background: var(--surface-light);
-  color: var(--text-muted);
-  padding: 0.125rem 0.625rem;
-  border-radius: 6px;
+.expense-count {
+  background: #F3F4F6;
+  color: #6B7280;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
   font-size: 0.875rem;
   font-weight: 600;
-}
-
-.filter-btn {
-  background: transparent;
-  border: 1px solid var(--glass-border);
-  color: var(--text-muted);
-  padding: 0.5rem 1rem;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  cursor: pointer;
-}
-
-.expenses-section {
-  padding: 0 1rem;
 }
 
 .expenses-list {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.75rem;
 }
 
-.expense-item {
-  padding: 1.25rem;
+.expense-card {
   display: flex;
   align-items: center;
   gap: 1rem;
-  transition: all 0.3s ease;
-  background: white;
-  border: 2px solid #f1f5f9;
+  padding: 1rem;
+  background: #F9FAFB;
   border-radius: 16px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  transition: all 0.2s;
 }
 
-.expense-item:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
-  border-color: #e2e8f0;
+.expense-card:hover {
+  background: #F3F4F6;
+  transform: translateX(4px);
 }
 
 .expense-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--surface-light);
-  color: var(--text-muted);
+  color: white;
+  flex-shrink: 0;
 }
 
-.expense-icon.food { background: rgba(236, 72, 153, 0.1); color: #ec4899; }
-.expense-icon.coffee { background: rgba(139, 92, 246, 0.1); color: #8b5cf6; }
-.expense-icon.groceries { background: rgba(16, 185, 129, 0.1); color: #10b981; }
-.expense-icon.transport { background: rgba(245, 158, 11, 0.1); color: #f59e0b; }
-.expense-icon.utilities { background: rgba(99, 102, 241, 0.1); color: #6366f1; }
-.expense-icon.entertainment { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
-.expense-icon.health { background: rgba(6, 182, 212, 0.1); color: #06b6d4; }
-.expense-icon.education { background: rgba(59, 130, 246, 0.1); color: #3b82f6; }
-.expense-icon.travel { background: rgba(14, 165, 233, 0.1); color: #0ea5e9; }
+.expense-icon.food { background: linear-gradient(135deg, #EC4899 0%, #F43F5E 100%); }
+.expense-icon.coffee { background: linear-gradient(135deg, #8B5CF6 0%, #A78BFA 100%); }
+.expense-icon.groceries { background: linear-gradient(135deg, #10B981 0%, #34D399 100%); }
+.expense-icon.transport { background: linear-gradient(135deg, #3B82F6 0%, #60A5FA 100%); }
+.expense-icon.utilities { background: linear-gradient(135deg, #F59E0B 0%, #FBBF24 100%); }
+.expense-icon.entertainment { background: linear-gradient(135deg, #EF4444 0%, #F87171 100%); }
+.expense-icon.health { background: linear-gradient(135deg, #06B6D4 0%, #22D3EE 100%); }
+.expense-icon.education { background: linear-gradient(135deg, #6366F1 0%, #818CF8 100%); }
+.expense-icon.travel { background: linear-gradient(135deg, #0EA5E9 0%, #38BDF8 100%); }
+.expense-icon.default { background: linear-gradient(135deg, #6B7280 0%, #9CA3AF 100%); }
 
-.expense-info {
+.expense-details {
   flex: 1;
+  min-width: 0;
 }
 
-.expense-desc {
-  font-size: 1rem;
+.expense-details h3 {
+  font-size: 0.9375rem;
   font-weight: 600;
-  margin-bottom: 0.125rem;
+  color: #1F2937;
+  margin: 0 0 0.25rem 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .expense-meta {
-  font-size: 0.8125rem;
-  color: var(--text-muted);
+  font-size: 0.75rem;
+  color: #9CA3AF;
+  margin: 0;
 }
 
-.payer {
-  font-weight: 500;
-}
-
-.expense-amount-box {
-  text-align: right;
+.expense-amount-section {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.25rem;
 }
 
 .expense-amount {
-  display: block;
-  font-size: 1.125rem;
+  font-size: 1rem;
   font-weight: 700;
-  margin-bottom: 0.125rem;
+  color: #1F2937;
+  white-space: nowrap;
 }
 
-.your-share {
-  font-size: 0.75rem;
-  color: var(--text-muted);
+.delete-icon-btn {
+  background: transparent;
+  border: none;
+  color: #EF4444;
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 6px;
+  transition: all 0.2s;
+  opacity: 0.6;
+}
+
+.delete-icon-btn:hover {
+  opacity: 1;
+  background: #FEF2F2;
 }
 
 .empty-state {
-  padding: 3rem;
   text-align: center;
-  color: var(--text-muted);
+  padding: 3rem 1rem;
+  color: #9CA3AF;
 }
 
-.icon-only {
-  width: 40px;
-  height: 40px;
-  padding: 0;
-}
-/* Members Section Styles */
-.members-section {
-  padding: 1.5rem;
-  margin-top: -1rem;
+.empty-icon {
+  opacity: 0.3;
+  margin-bottom: 1rem;
 }
 
-.members-grid {
+.empty-state p {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #6B7280;
+  margin: 0 0 0.5rem 0;
+}
+
+.empty-state span {
+  font-size: 0.875rem;
+  color: #9CA3AF;
+}
+
+.fab {
+  position: fixed;
+  bottom: 80px;
+  right: 1.5rem;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%);
+  border: none;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(139, 92, 246, 0.4);
+  transition: all 0.3s;
+  z-index: 50;
+}
+
+.fab:hover {
+  transform: scale(1.1);
+  box-shadow: 0 12px 32px rgba(139, 92, 246, 0.5);
+}
+
+.fab:active {
+  transform: scale(0.95);
+}
+
+@media (min-width: 768px) {
+  .fab {
+    bottom: 2rem;
+  }
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  padding: 1rem;
+}
+
+.modal-card {
+  background: white;
+  border-radius: 24px;
+  max-width: 500px;
+  width: 100%;
+  max-height: 80vh;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
 }
 
-.member-card {
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.5rem;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+.modal-header h3 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #1F2937;
+  margin: 0;
+}
+
+.close-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: #F3F4F6;
+  border: none;
+  font-size: 1.5rem;
+  color: #6B7280;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.close-btn:hover {
+  background: #E5E7EB;
+}
+
+.members-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.member-item {
   display: flex;
   align-items: center;
   gap: 1rem;
   padding: 0.75rem;
-  background: #f8fafc;
+  background: #F9FAFB;
   border-radius: 12px;
 }
 
-.member-card .avatar {
-  width: 32px;
-  height: 32px;
+.member-avatar {
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   color: white;
   font-weight: 600;
-  font-size: 0.8125rem;
+  font-size: 1rem;
 }
 
 .member-info {
+  flex: 1;
   display: flex;
   flex-direction: column;
 }
 
-.member-info .name {
-  font-size: 0.875rem;
+.member-name {
+  font-size: 0.9375rem;
   font-weight: 600;
-  color: #0f172a;
+  color: #1F2937;
 }
 
-.member-info .role {
+.member-role {
   font-size: 0.75rem;
-  color: #94a3b8;
+  color: #9CA3AF;
 }
 
-.add-member-form {
+.add-member-section {
+  padding: 1.5rem;
+  border-top: 1px solid #F3F4F6;
   display: flex;
   gap: 0.75rem;
-  margin-top: 0.5rem;
 }
 
-.add-member-form input {
+.member-input {
   flex: 1;
-  padding: 0.625rem 1rem;
-  border: 1px solid #f1f5f9;
-  border-radius: 10px;
-  font-size: 0.875rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid #E5E7EB;
+  border-radius: 12px;
+  font-size: 0.9375rem;
+  outline: none;
+  transition: all 0.2s;
 }
 
-.btn-sm {
-  height: 38px;
-  padding: 0 1.25rem;
-  font-size: 0.8125rem;
+.member-input:focus {
+  border-color: #8B5CF6;
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
 }
 
-/* Transitions */
-.slide-enter-active, .slide-leave-active {
+.add-member-btn {
+  padding: 0.75rem 1.5rem;
+  background: linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%);
+  border: none;
+  border-radius: 12px;
+  color: white;
+  font-weight: 600;
+  font-size: 0.9375rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.add-member-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+}
+
+.modal-enter-active, .modal-leave-active {
   transition: all 0.3s ease;
 }
-.slide-enter-from, .slide-leave-to {
+
+.modal-enter-from, .modal-leave-to {
   opacity: 0;
-  transform: translateY(-10px);
 }
 
-.doc-badge-inline {
-  display: inline-flex;
+.modal-enter-from .modal-card,
+.modal-leave-to .modal-card {
+  transform: scale(0.9) translateY(20px);
+}
+
+.loading {
+  min-height: 100vh;
+  display: flex;
   align-items: center;
-  gap: 2px;
-  font-size: 0.65rem;
-  font-weight: 700;
-  color: #10b981;
-  background: #10b98110;
-  padding: 1px 4px;
-  border-radius: 3px;
-  margin-left: 0.5rem;
-  vertical-align: middle;
+  justify-content: center;
+  background: #F9FAFB;
 }
 </style>
